@@ -19,6 +19,18 @@ RSS_FEEDS = {
     "arxiv cs.RO":        "https://rss.arxiv.org/rss/cs.RO",
 }
 
+# 研究员博客 / Substack — 更新频率低但质量高，窗口放宽到 72 小时
+BLOG_FEEDS = {
+    "Interconnects (Nathan Lambert)":   "https://www.interconnects.ai/feed",
+    "Ahead of AI (Sebastian Raschka)":  "https://magazine.sebastianraschka.com/feed",
+    "Import AI (Jack Clark)":           "https://importai.substack.com/feed",
+    "The Gradient":                     "https://thegradient.pub/rss/",
+    "One Useful Thing (Ethan Mollick)": "https://www.oneusefulthing.org/feed",
+    "AI Snake Oil":                     "https://aisnakeoil.substack.com/feed",
+    "Lilian Weng":                      "https://lilianweng.github.io/index.xml",
+    "Last Week in AI":                  "https://lastweekin.ai/feed",
+}
+
 KEYWORDS = [
     "robot", "robotics", "humanoid", "manipulation", "embodied",
     "agent", "agentic", "multi-agent", "autonomous",
@@ -28,13 +40,21 @@ KEYWORDS = [
 
 
 def fetch_recent_articles(hours: int = 24) -> list[dict]:
+    return _fetch_feeds(RSS_FEEDS, hours=hours, per_source=50)
+
+
+def fetch_recent_blogs(hours: int = 72) -> list[dict]:
+    return _fetch_feeds(BLOG_FEEDS, hours=hours, per_source=5)
+
+
+def _fetch_feeds(feeds: dict, hours: int, per_source: int) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     articles = []
 
-    for source, url in RSS_FEEDS.items():
+    for source, url in feeds.items():
         try:
             feed = feedparser.parse(url, request_headers={"User-Agent": "Mozilla/5.0"})
-            for entry in feed.entries[:50]:
+            for entry in feed.entries[:per_source]:
                 published = None
                 for attr in ("published_parsed", "updated_parsed"):
                     t = getattr(entry, attr, None)
@@ -50,7 +70,7 @@ def fetch_recent_articles(hours: int = 24) -> list[dict]:
                 text = (title + " " + summary).lower()
 
                 # arxiv: only keep robotics/agent-related papers
-                if "arxiv" in source and not any(kw in text for kw in KEYWORDS):
+                if source.startswith("arxiv") and not any(kw in text for kw in KEYWORDS):
                     continue
 
                 articles.append({
@@ -66,7 +86,7 @@ def fetch_recent_articles(hours: int = 24) -> list[dict]:
     return articles
 
 
-def summarize_with_claude(articles: list[dict]) -> str:
+def summarize_with_claude(articles: list[dict], blogs: list[dict]) -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     articles_text = "\n\n---\n\n".join(
@@ -74,43 +94,53 @@ def summarize_with_claude(articles: list[dict]) -> str:
         for a in articles
     )
 
+    blogs_text = "\n\n---\n\n".join(
+        f"[博客·{b['source']}] ({b['published']})\n标题: {b['title']}\n链接: {b['url']}\n内容: {b['summary']}"
+        for b in blogs
+    ) if blogs else "（今日无新博客更新）"
+
     today = datetime.now().strftime("%Y年%m月%d日")
 
     prompt = f"""你是一位 AI 领域的资深研究员，为顶级机构的同行撰写每日深度简报。读者是熟悉该领域的专业人士，不需要解释基础概念，需要的是洞察和判断。
 
-以下是过去 24 小时收集的 AI / Robotics / Agent 相关原始资讯（共 {len(articles)} 条）：
+【新闻资讯】过去 24 小时，共 {len(articles)} 条：
 
 {articles_text}
 
-请完成以下四个部分，严格使用 HTML 格式输出（不要加 markdown 代码块、不要加 ```html）：
+【研究员博客】过去 72 小时（更新频率低但质量高），共 {len(blogs)} 条：
 
----
+{blogs_text}
+
+请完成以下五个部分，严格使用 HTML 格式输出（不要加 markdown 代码块、不要加 ```html）：
 
 第一部分：重点新闻（10-15条）
-每条包含：
-- 发生了什么（1句）
-- 技术/商业意义（2-3句，要有判断和立场，不要复述原文）
-- 与其他新闻或已有趋势的关联（如有）
+每条包含：发生了什么（1句）、技术/商业意义（2-3句，要有判断和立场）、与其他动态的关联（如有）。
 
 第二部分：趋势分析
-基于今日所有资讯，识别 2-3 个值得关注的技术或行业趋势。每个趋势需要有证据（引用具体新闻），并给出你的预判。
+基于今日所有资讯，识别 2-3 个值得关注的技术或行业趋势，需有证据引用，给出预判。
 
 第三部分：值得深挖
-列出 2-3 篇值得精读的论文或报告（优先 arxiv），说明为什么重要、读者应关注哪个核心贡献。
+列出 2-3 篇值得精读的论文或报告（优先 arxiv），说明核心贡献和阅读重点。
 
-第四部分：一句话总结
-今日最关键的一个信号是什么（不超过60字）。
+第四部分：今日推荐博客
+从博客列表中挑选 1 篇最值得精读的文章（若无合适则从新闻中选最具深度的长文）。给出：
+- 为什么这篇值得花 15-30 分钟细读
+- 3 个核心观点/论点（bullet）
+- 适合谁读（研究员 / 工程师 / 产品经理）
+
+第五部分：今日信号
+最关键的一个判断，不超过 60 字。
 
 HTML 格式模板：
 
 <h2>🤖 AI 深度简报 · {today}</h2>
-<p class="intro">覆盖 {len(articles)} 条资讯 · Robotics / Agent / 大模型</p>
+<p class="intro">新闻 {len(articles)} 条 · 博客 {len(blogs)} 篇 · Robotics / Agent / 大模型</p>
 
 <div class="section-title">📌 重点新闻</div>
 
 <div class="item">
-  <h3><a href="URL">标题（中文翻译）</a></h3>
-  <span class="meta">来源：XXX · XXX时间</span>
+  <h3><a href="URL">标题（中文）</a></h3>
+  <span class="meta">来源：XXX · 时间</span>
   <p><strong>事件：</strong>……</p>
   <p><strong>意义：</strong>……</p>
   <p class="tag">关联：……</p>
@@ -120,14 +150,28 @@ HTML 格式模板：
 
 <div class="trend">
   <h3>趋势名称</h3>
-  <p>……分析内容……</p>
+  <p>……</p>
 </div>
 
 <div class="section-title">🔬 值得深挖</div>
 
 <div class="deep-read">
   <h3><a href="URL">论文/报告标题</a></h3>
-  <p>……为什么重要，核心贡献……</p>
+  <p>……</p>
+</div>
+
+<div class="section-title">📖 今日推荐博客</div>
+
+<div class="blog-pick">
+  <h3><a href="URL">文章标题</a></h3>
+  <span class="meta">作者/来源 · 时间</span>
+  <p class="blog-why">……为什么值得读……</p>
+  <ul>
+    <li>核心观点一</li>
+    <li>核心观点二</li>
+    <li>核心观点三</li>
+  </ul>
+  <p class="blog-audience">适合：……</p>
 </div>
 
 <div class="closing">
@@ -173,6 +217,15 @@ h2 { color: #0f0f1a; margin-top: 0; font-size: 20px; }
 .deep-read h3 { margin: 0 0 8px; font-size: 15px; }
 .deep-read h3 a { color: #92400e; text-decoration: none; }
 .deep-read p { margin: 0; font-size: 14px; line-height: 1.7; color: #444; }
+.blog-pick { border-left: 3px solid #db2777; padding: 14px 18px;
+             margin-bottom: 18px; background: #fdf2f8; border-radius: 0 8px 8px 0; }
+.blog-pick h3 { margin: 0 0 4px; font-size: 15px; }
+.blog-pick h3 a { color: #831843; text-decoration: none; }
+.blog-pick h3 a:hover { text-decoration: underline; }
+.blog-why { margin: 10px 0 8px; font-size: 14px; line-height: 1.7; color: #444; }
+.blog-pick ul { margin: 8px 0; padding-left: 20px; font-size: 14px;
+                line-height: 1.8; color: #444; }
+.blog-audience { font-size: 12px; color: #9d174d; margin: 8px 0 0; }
 .closing { background: #1a1a2e; color: #e0e0ff; border-radius: 8px;
            padding: 16px 20px; margin-top: 28px; font-size: 14px; line-height: 1.6; }
 .closing strong { color: #fff; }
@@ -209,16 +262,20 @@ def send_email(html_body: str) -> None:
 
 
 if __name__ == "__main__":
-    print("Fetching articles...")
+    print("Fetching news articles...")
     articles = fetch_recent_articles(hours=24)
-    print(f"Found {len(articles)} articles")
+    print(f"Found {len(articles)} news articles")
 
-    if not articles:
-        print("No articles found, skipping.")
+    print("Fetching blog posts...")
+    blogs = fetch_recent_blogs(hours=72)
+    print(f"Found {len(blogs)} blog posts")
+
+    if not articles and not blogs:
+        print("No content found, skipping.")
         sys.exit(0)
 
     print("Summarizing with Claude...")
-    summary = summarize_with_claude(articles)
+    summary = summarize_with_claude(articles, blogs)
 
     print("Sending email...")
     send_email(summary)
