@@ -154,12 +154,12 @@ def main():
     # ── 4. 发送时间 ───────────────────────────────────────────────────────────
     section("发送时间")
     print(dim("  GitHub Actions 使用 UTC 时间。常用参考："))
-    print(dim("  北京时间 08:00 = UTC 0 │ 伦敦 BST 07:00 = UTC 4 │ 纽约 07:00 = UTC 11"))
-    send_hour_raw = ask("期望触发时间（UTC 小时，0-23）", default="4")
+    print(dim("  北京时间 08:00 = UTC 0 │ 伦敦 BST 07:00 = UTC 6 │ 纽约 07:00 = UTC 11"))
+    send_hour_raw = ask("期望触发时间（UTC 小时，0-23）", default="6")
     try:
         send_hour = int(send_hour_raw) % 24
     except ValueError:
-        send_hour = 4
+        send_hour = 6
 
     # ── 5. 输出语言 ───────────────────────────────────────────────────────────
     section("简报语言")
@@ -194,13 +194,14 @@ def main():
     section("更新 config.yml")
     config_path = Path(__file__).parent / "config.yml"
     raw = config_path.read_text(encoding="utf-8")
+    model_key = "gemini_model" if provider == "gemini" else "anthropic_model"
 
     # provider
     raw = re.sub(r"^(provider:\s*)\S+", f"\\g<1>{provider}", raw, flags=re.MULTILINE)
     # send_hour_utc
     raw = re.sub(r"^(send_hour_utc:\s*)\d+", f"\\g<1>{send_hour}", raw, flags=re.MULTILINE)
-    # model
-    raw = re.sub(r"^(\s+model:\s*)\S+", f"\\g<1>{default_model}", raw, flags=re.MULTILINE)
+    # selected provider model
+    raw = re.sub(rf"^(\s+{model_key}:\s*)\S+", f"\\g<1>{default_model}", raw, flags=re.MULTILINE)
     # output_language
     raw = re.sub(r"^(\s+output_language:\s*)\S+", f"\\g<1>{lang}", raw, flags=re.MULTILINE)
 

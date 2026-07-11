@@ -1,0 +1,82 @@
+name: 🔎 Website Audit
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check audit schedule
+        id: timecheck
+        run: |
+          ENABLED=$(awk '/^website_audit:/{flag=1;next}/^[^[:space:]]/{flag=0}flag && $1=="enabled:" {print $2; exit}' config.yml)
+          CONFIG_HOUR=$(awk '/^website_audit:/{flag=1;next}/^[^[:space:]]/{flag=0}flag && $1=="send_hour_utc:" {print $2; exit}' config.yml)
+          CURRENT_HOUR=$(date -u +%-H)
+          CURRENT_DATE=$(date -u +%Y-%m-%d)
+          LAST_SENT=$(python3 -c "import json; from pathlib import Path; p=Path('website_audit_history.json'); d=json.loads(p.read_text()) if p.exists() else {}; print(d.get('last_sent_date',''))" 2>/dev/null || echo "")
+
+          ENABLED=${ENABLED:-false}
+          CONFIG_HOUR=${CONFIG_HOUR:-0}
+
+          echo "Enabled: $ENABLED | Config hour (UTC): $CONFIG_HOUR | Current hour (UTC): $CURRENT_HOUR | Last sent: $LAST_SENT"
+
+          if [ "$ENABLED" != "true" ]; then
+            echo "Website audit disabled, skipping."
+            echo "should_send=false" >> $GITHUB_OUTPUT
+          elif [ "$LAST_SENT" = "$CURRENT_DATE" ]; then
+            echo "Already audited today, skipping."
+            echo "should_send=false" >> $GITHUB_OUTPUT
+          elif [ "$CURRENT_HOUR" -ge "$CONFIG_HOUR" ]; then
+            echo "Hour $CURRENT_HOUR >= $CONFIG_HOUR and not yet audited today — will send."
+            echo "should_send=true" >> $GITHUB_OUTPUT
+          else
+            echo "Hour $CURRENT_HOUR < $CONFIG_HOUR, too early."
+            echo "should_send=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Python
+        if: steps.timecheck.outputs.should_send == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: steps.timecheck.outputs.should_send == 'true' || github.event_name == 'workflow_dispatch'
+        run: pip install -r requirements.txt
+
+      - name: Run website audit
+        if: steps.timecheck.outputs.should_send == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python website_audit.py
+
+      - name: Upload audit artifacts
+        if: steps.timecheck.outputs.should_send == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-audit-report
+          path: artifacts/website_audit
+          if-no-files-found: error
+
+      - name: Commit updated audit history
+        if: steps.timecheck.outputs.should_send == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website_audit_history.json
+          git diff --staged --quiet || git commit -m "chore: update website audit history [skip ci]"
+          git push

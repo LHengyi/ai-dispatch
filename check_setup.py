@@ -10,10 +10,32 @@ from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+from urllib.parse import urlparse
+
+from dispatch_utils import get_provider_model
 
 OK = "✅"
 FAIL = "❌"
 errors = []
+
+
+def extract_audit_targets(audit_cfg: dict) -> list[tuple[str, str]]:
+    targets = audit_cfg.get("targets") or []
+    if targets:
+        if not isinstance(targets, list):
+            return [("invalid", "website_audit.targets 不是列表")]
+
+        normalized = []
+        for index, target in enumerate(targets, start=1):
+            if isinstance(target, str):
+                normalized.append((f"targets[{index}]", target.strip()))
+            elif isinstance(target, dict):
+                normalized.append((f"targets[{index}]", str(target.get("start_url", "")).strip()))
+            else:
+                normalized.append((f"targets[{index}]", ""))
+        return normalized
+
+    return [("start_url", str(audit_cfg.get("start_url", "")).strip())]
 
 
 def check(label: str, ok: bool, detail: str = "") -> bool:
@@ -65,13 +87,29 @@ if check("config.yml 存在", config_path.exists()):
         classics = cfg.get("classics") or []
         check("classics 已配置", True,
               f"{len(classics)} 篇（0 篇也可以，此项可选）")
+        audit_cfg = cfg.get("website_audit") or {}
+        audit_enabled = bool(audit_cfg.get("enabled", False))
+        check("website_audit 已配置", True,
+              "已启用" if audit_enabled else "已禁用（可选功能）")
+        if audit_enabled:
+            targets = extract_audit_targets(audit_cfg)
+            valid_targets = [target for target in targets if target[0] != "invalid"]
+            check("website_audit.targets", bool(valid_targets),
+                  f"{len(valid_targets)} 个网站" if valid_targets else "未设置")
+            for label, start_url in valid_targets:
+                parsed = urlparse(start_url)
+                check(f"website_audit.{label}", bool(start_url) and parsed.scheme in {"http", "https"},
+                      start_url or "未设置")
+            send_hour = audit_cfg.get("send_hour_utc")
+            hour_ok = isinstance(send_hour, int) and 0 <= send_hour <= 23
+            check("website_audit.send_hour_utc", hour_ok, str(send_hour))
     except Exception as e:
         check("YAML 格式正确", False, str(e))
 
 # ── 3. LLM API ───────────────────────────────────
 section(f"LLM API ({provider})")
 api_key = os.getenv(llm_key_name)
-model = cfg["digest"]["model"] if cfg else ("gemini-2.0-flash" if provider == "gemini" else "claude-sonnet-4-6")
+model = get_provider_model(cfg) if cfg else ("gemini-2.0-flash" if provider == "gemini" else "claude-sonnet-4-6")
 if api_key:
     try:
         if provider == "gemini":
@@ -131,7 +169,9 @@ if all_ok and gmail_user and gmail_pass and recipient:
   <tr><td style="padding:8px;color:#666">经典收藏</td>
       <td>{len(cfg.get('classics') or [])} 篇</td></tr>
   <tr><td style="padding:8px;color:#666">使用模型</td>
-      <td>{cfg['digest']['model']}</td></tr>
+      <td>{model}</td></tr>
+  <tr><td style="padding:8px;color:#666">网站巡检</td>
+      <td>{"启用" if (cfg.get('website_audit') or {}).get('enabled') else "未启用"}</td></tr>
 </table>
 <p style="margin-top:24px;color:#888;font-size:12px">
   AI Dispatch · 由 config.yml send_hour_utc 控制发送时间

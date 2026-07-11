@@ -52,6 +52,7 @@ jobs:
           hour      = "${{ inputs.send_hour_utc }}".strip()
           language  = "${{ inputs.output_language }}"
           model     = "gemini-2.0-flash" if provider == "gemini" else "claude-sonnet-4-6"
+          model_key = "gemini_model" if provider == "gemini" else "anthropic_model"
 
           try:
               hour_int = int(hour)
@@ -65,7 +66,7 @@ jobs:
 
           content = re.sub(r"^provider:\s*\S+",       f"provider: {provider}",  content, flags=re.MULTILINE)
           content = re.sub(r"^send_hour_utc:\s*\d+",  f"send_hour_utc: {hour_int}", content, flags=re.MULTILINE)
-          content = re.sub(r"^(\s+model:\s*)\S+",     rf"\g<1>{model}",          content, flags=re.MULTILINE)
+          content = re.sub(rf"^(\s+{model_key}:\s*)\S+", rf"\g<1>{model}",       content, flags=re.MULTILINE)
           content = re.sub(r"^(\s+output_language:\s*)\S+", rf"\g<1>{language}", content, flags=re.MULTILINE)
 
           with open("config.yml", "w", encoding="utf-8") as f:

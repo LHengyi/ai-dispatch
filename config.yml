@@ -144,3 +144,29 @@ digest:
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）
   max_tokens: 6000
   output_language: English  # 摘要输出语言，可改为 中文
+
+
+# ──────────────────────────────────────────────
+#  STEP 6（可选）· 网站巡检
+#  定时抓取指定网站，检查坏链/超时/服务器错误，并用 LLM 生成邮件报告
+#  默认关闭；支持旧写法 start_url，也支持新写法 targets（推荐，可配多个网站）
+# ──────────────────────────────────────────────
+website_audit:
+  enabled: true
+  # 单站点兼容写法：
+  # start_url: https://gitcode.com/cann
+  # 多站点推荐写法：
+  targets:
+    - name: GitCode CANN
+      start_url: https://gitcode.com/cann
+    - name: GitCode CANN Recipes
+      start_url: https://gitcode.com/cann/cann-recipes-infer
+  send_hour_utc: 8
+  max_pages: 25
+  max_links_per_page: 150
+  check_external_links: true
+  request_timeout_seconds: 15
+  max_workers: 8
+  max_findings_in_prompt: 25
+  max_tokens: 32786
+  output_language: English

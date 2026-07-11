@@ -1,24 +1,14 @@
 import feedparser
-import anthropic
-import smtplib
 import json
-import os
 import re
 import sys
-import yaml
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from dispatch_utils import generate_text, load_config, send_email as send_wrapped_email
+
 HISTORY_PATH = Path(__file__).parent / "sent_history.json"
 HISTORY_MAX = 1000  # 最多保留最近 1000 条，防止文件无限增长
-
-
-def load_config() -> dict:
-    path = Path(__file__).parent / "config.yml"
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def load_history() -> dict:
@@ -122,7 +112,6 @@ def fetch_blog_candidates(cfg: dict, history: set[str]) -> list[dict]:
 
 
 def summarize(articles: list[dict], blog_candidates: list[dict], cfg: dict) -> str:
-    provider = cfg.get("provider", "anthropic")
     d = cfg["digest"]
 
     topics_str = "、".join(cfg["topics"])
@@ -217,33 +206,7 @@ HTML 格式模板：
 <div class="closing">
   <strong>今日信号：</strong>……
 </div>"""
-
-    if provider == "gemini":
-        from google import genai as google_genai
-        from google.genai import types as genai_types
-        model = d.get("gemini_model", "gemini-2.0-flash")
-        client = google_genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
-                max_output_tokens=d["max_tokens"],
-            ),
-        )
-        text = response.text
-        if not text:
-            finish = (response.candidates[0].finish_reason if response.candidates else "no candidates")
-            raise RuntimeError(f"Gemini returned empty response (finish_reason={finish})")
-        return text
-    else:
-        model = d.get("anthropic_model", "claude-sonnet-4-6")
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        msg = client.messages.create(
-            model=model,
-            max_tokens=d["max_tokens"],
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return msg.content[0].text
+    return generate_text(prompt, cfg, section_name="digest")
 
 
 EMAIL_CSS = """
@@ -297,28 +260,13 @@ h2 { color: #0f0f1a; margin-top: 0; font-size: 20px; }
 def send_email(html_body: str) -> None:
     today = datetime.now().strftime("%m/%d")
     subject = f"📡 AI Dispatch · {today}"
-
-    full_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>{EMAIL_CSS}</style>
-</head>
-<body>
-<div class="wrapper">
-  <div class="header"><h1>📡 AI Dispatch</h1></div>
-  <div class="body">{html_body}</div>
-  <div class="footer">AI Dispatch · Powered by Claude + GitHub Actions · 每日 07:00 BST 自动发送</div>
-</div>
-</body></html>"""
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = os.environ["GMAIL_USER"]
-    msg["To"] = os.environ["RECIPIENT_EMAIL"]
-    msg.attach(MIMEText(full_html, "html", "utf-8"))
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(os.environ["GMAIL_USER"], os.environ["GMAIL_APP_PASSWORD"])
-        server.sendmail(os.environ["GMAIL_USER"], os.environ["RECIPIENT_EMAIL"], msg.as_string())
+    send_wrapped_email(
+        subject,
+        html_body,
+        header_title="📡 AI Dispatch",
+        footer_text="AI Dispatch · Powered by your configured LLM + GitHub Actions",
+        css=EMAIL_CSS,
+    )
 
 
 if __name__ == "__main__":
