@@ -152,7 +152,7 @@ digest:
 
 # ──────────────────────────────────────────────
 #  STEP 6（可选）· 网站巡检
-#  定时抓取指定网站，检查坏链/超时/服务器错误，并用 LLM 生成邮件报告
+#  每周定时抓取指定网站，检查坏链/超时/服务器错误，并用 LLM 生成邮件报告
 #  默认关闭；支持旧写法 start_url，也支持新写法 targets（推荐，可配多个网站）
 # ──────────────────────────────────────────────
 website_audit:
@@ -165,7 +165,7 @@ website_audit:
       start_url: https://gitcode.com/cann
     - name: GitCode CANN Recipes
       start_url: https://gitcode.com/cann/cann-recipes-infer
-  send_hour_utc: 0
+  send_hour_utc: 0               # 默认 workflow 固定在 UTC 周一 00:00 触发（北京时间周一 08:00）；若你修改 cron，请同步更新这里
   follow_internal_links: false  # false = 只检查 start_url 这个页面；true = 继续抓同站内页
   max_pages: 25                 # 仅在 follow_internal_links: true 时生效
   max_links_per_page: 150       # 每个已抓取页面最多解析多少个 <a> 链接

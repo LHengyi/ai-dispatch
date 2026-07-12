@@ -119,14 +119,14 @@ Once all green, AI Dispatch runs automatically every day. The default send time 
 
 ## Optional: Website Link Audit
 
-AI Dispatch can also run a separate website audit that checks one or more target pages or sites for broken or inaccessible links, asks your configured LLM to write a prioritized report, and emails that report to the same inbox.
+AI Dispatch can also run a separate website audit that checks one or more target pages or sites for broken or inaccessible links, asks your configured LLM to write a prioritized report, and emails that report to the same inbox on a weekly schedule.
 
 Enable it in `config.yml`:
 
 ```yml
 website_audit:
   enabled: true
-  send_hour_utc: 8
+  send_hour_utc: 0
   targets:
     - name: Main Site
       start_url: https://example.com
@@ -137,6 +137,8 @@ website_audit:
   check_external_links: true
 ```
 
+The default workflow is scheduled for Monday `00:00` UTC, which is Monday `08:00` in Beijing. Keep `send_hour_utc: 0` unless you also change the workflow cron.
+
 Then run **Actions → 🔎 Website Audit → Run workflow** once to test it.
 
 Notes:
@@ -146,6 +148,7 @@ Notes:
 - `follow_internal_links: false` means "only audit the specified page". Set it to `true` if you want the audit to continue crawling same-host internal pages up to `max_pages`.
 - The first version uses static HTTP crawling, so JavaScript-rendered links may be missed.
 - The website audit workflow is separate from the daily news workflow, so the two jobs do not block each other.
+- The default scheduled audit runs exactly once a week at Monday `00:00` UTC / Monday `08:00` Beijing time.
 
 ---
 
@@ -509,14 +512,14 @@ python setup.py
 
 ## 可选功能：网站链接巡检
 
-AI Dispatch 还可以单独运行一个网站巡检任务：检查一个或多个指定页面或站点的坏链/不可访问链接，交给 LLM 生成优先级报告，并把结果发到同一个邮箱。
+AI Dispatch 还可以单独运行一个网站巡检任务：按每周计划检查一个或多个指定页面或站点的坏链/不可访问链接，交给 LLM 生成优先级报告，并把结果发到同一个邮箱。
 
 在 `config.yml` 里启用：
 
 ```yml
 website_audit:
   enabled: true
-  send_hour_utc: 8
+  send_hour_utc: 0
   targets:
     - name: Main Site
       start_url: https://example.com
@@ -527,6 +530,8 @@ website_audit:
   check_external_links: true
 ```
 
+默认 workflow 固定在 `UTC 周一 00:00` 触发，也就是北京时间周一 `08:00`。除非你同时修改 workflow 的 cron，否则这里保持 `send_hour_utc: 0` 即可。
+
 然后手动运行一次 **Actions → 🔎 Website Audit → Run workflow** 做验证。
 
 说明：
@@ -536,6 +541,7 @@ website_audit:
 - `follow_internal_links: false` 表示“只检查你指定的这个页面”；如果想继续抓取同站内页，再改成 `true`，并用 `max_pages` 控制最多抓多少页。
 - 当前版本使用静态 HTTP 抓取，JavaScript 动态渲染出来的链接可能抓不到。
 - 网站巡检与新闻简报是两条独立 workflow，彼此不会互相阻塞。
+- 默认定时巡检现在每周只会在“北京时间周一早上 08:00”触发一次。
 
 ---
 
