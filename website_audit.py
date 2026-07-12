@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import html
 import json
 import re
 import socket
@@ -566,6 +567,78 @@ def findings_for_prompt(report: dict, limit: int) -> str:
     return "\n".join(lines)
 
 
+def suggested_fix_for_issue(item: dict) -> str:
+    issue_kind = item.get("issue_kind")
+    if issue_kind == "not_found":
+        if item.get("internal"):
+            return "Update the href to the new canonical internal path, or restore the missing page/file at the expected location."
+        return "Replace the external URL with a valid destination, or remove the reference if the destination has been retired."
+    if issue_kind == "access_blocked":
+        return "Verify whether the destination requires login or anti-bot protection. If users should reach it publicly, switch to a public URL."
+    if issue_kind == "rate_limited":
+        return "Re-check the URL manually and prefer a less rate-limited public landing page if this link is meant for regular users."
+    if issue_kind == "server_error":
+        return "Retry and verify the destination service health. If failures persist, replace the link or temporarily remove it."
+    if issue_kind == "unreachable":
+        return "Check DNS / SSL / network availability and confirm the domain is still active."
+    return "Manually verify the destination and update or remove the link if it is no longer appropriate."
+
+
+def build_structured_findings_html(reports: list[dict]) -> str:
+    sections = ['<div class="section-title">Structured Broken Link List</div>']
+    total_issues = sum(report["issue_count"] for report in reports)
+
+    if total_issues == 0:
+        sections.append(
+            "<p>No broken links were detected in this run. "
+            "This is still based on static HTTP checks and may miss JavaScript-rendered links.</p>"
+        )
+        return "\n".join(sections)
+
+    for report in reports:
+        issue_findings = [item for item in report["findings"] if not item["ok"]]
+        sections.append(
+            f'<div class="issue"><h3>{html.escape(report["target_name"])}</h3>'
+            f'<span class="meta">{report["issue_count"]} issues · '
+            f'{report["internal_issue_count"]} internal · {report["external_issue_count"]} external</span>'
+        )
+
+        if not issue_findings:
+            sections.append("<p>No broken links were detected for this target.</p></div>")
+            continue
+
+        sections.append("<ol>")
+        for item in issue_findings:
+            anchors = item.get("anchor_samples") or []
+            anchor_text = ", ".join(f'"{anchor}"' for anchor in anchors) if anchors else "No anchor text captured"
+            source_pages = ", ".join(item.get("source_pages") or []) or "n/a"
+            status = item["status_code"] if item["status_code"] is not None else "n/a"
+            scope = "INTERNAL" if item["internal"] else "EXTERNAL"
+            detail = item.get("error_detail") or item.get("final_url") or "n/a"
+            fix_hint = suggested_fix_for_issue(item)
+            sections.append(
+                "".join(
+                    [
+                        "<li>",
+                        f"<p><strong>Broken link:</strong> <a href=\"{html.escape(item['url'])}\">{html.escape(item['url'])}</a></p>",
+                        f"<p><strong>Type:</strong> {scope} · {html.escape(item.get('issue_kind') or 'unknown')} · status={status}</p>",
+                        f"<p><strong>Anchor text:</strong> {html.escape(anchor_text)}</p>",
+                        f"<p><strong>Found on:</strong> {html.escape(source_pages)}</p>",
+                        f"<p><strong>Observed detail:</strong> {html.escape(detail)}</p>",
+                        f"<p><strong>Suggested fix:</strong> {html.escape(fix_hint)}</p>",
+                        "</li>",
+                    ]
+                )
+            )
+        sections.append("</ol></div>")
+
+    return "\n".join(sections)
+
+
+def compose_weekly_email_body(summary_html: str, reports: list[dict]) -> str:
+    return f"{summary_html}\n{build_structured_findings_html(reports)}"
+
+
 def reports_for_prompt(reports: list[dict], limit: int) -> str:
     sections = []
     for index, report in enumerate(reports, start=1):
@@ -613,9 +686,12 @@ def build_weekly_llm_prompt(reports: list[dict], cfg: dict) -> str:
 3. 这是“一封汇总周报”，必须在同一封邮件里覆盖所有站点，不要拆成多封。
 4. 重点优先级：内部链接问题 > 外部链接问题。
 5. 先给出跨站点的总体判断，再逐站点写重点问题。
-6. 对 403 / 429 这类结果要谨慎措辞，说明它们可能是权限或反爬限制，不一定是用户可见的坏链。
-7. 如果某个站点没有发现问题，也要在邮件中明确写出。
-8. 如果整体没有发现问题，也要给出简短结论，并明确说明这是静态 HTTP 抓取，可能遗漏 JavaScript 动态渲染出的链接。
+6. 在每个站点的小节里，尽量使用 `<ol>` 或 `<ul>` 列表，而不是纯大段文字。
+7. 对每个重点问题，明确说明：链接是否失效、是否捕获到 anchor text、如果捕获到了 anchor text 则直接写出来。
+8. 必须提供清晰的“如何改进”建议，优先给出可以直接执行的修复动作。
+9. 对 403 / 429 这类结果要谨慎措辞，说明它们可能是权限或反爬限制，不一定是用户可见的坏链。
+10. 如果某个站点没有发现问题，也要在邮件中明确写出。
+11. 如果整体没有发现问题，也要给出简短结论，并明确说明这是静态 HTTP 抓取，可能遗漏 JavaScript 动态渲染出的链接。
 
 本次周报汇总元数据：
 - 生成时间：{generated_at}
@@ -641,9 +717,9 @@ def build_weekly_llm_prompt(reports: list[dict], cfg: dict) -> str:
 <div class="issue">
   <h3>站点名称</h3>
   <span class="meta">问题数 / 内外链分布 / 抓取范围</span>
-  <p><strong>Top issues:</strong> ...</p>
-  <p><strong>Why it matters:</strong> ...</p>
-  <p><strong>Where to look:</strong> ...</p>
+  <ol>
+    <li>Broken link / anchor text / why it matters / where to look</li>
+  </ol>
 </div>
 
 <div class="section-title">Cross-Site Patterns & Risks</div>
@@ -652,7 +728,7 @@ def build_weekly_llm_prompt(reports: list[dict], cfg: dict) -> str:
   <p>...</p>
 </div>
 
-<div class="section-title">Recommended Fixes</div>
+<div class="section-title">Improvement Suggestions</div>
 <ol>
   <li>...</li>
 </ol>
@@ -701,8 +777,14 @@ def build_site_html_artifact(report: dict) -> str:
     issue_items = "\n".join(
         [
             (
-                f"<li><strong>{'INTERNAL' if item['internal'] else 'EXTERNAL'}</strong> · "
-                f"{item['issue_kind']} · {item['status_code'] or 'n/a'} · {item['url']}</li>"
+                "<li>"
+                f"<p><strong>Broken link:</strong> <a href=\"{html.escape(item['url'])}\">{html.escape(item['url'])}</a></p>"
+                f"<p><strong>Type:</strong> {'INTERNAL' if item['internal'] else 'EXTERNAL'} · "
+                f"{html.escape(item['issue_kind'] or 'unknown')} · {item['status_code'] or 'n/a'}</p>"
+                f"<p><strong>Anchor text:</strong> "
+                f"{html.escape(', '.join(item['anchor_samples']) if item['anchor_samples'] else 'No anchor text captured')}</p>"
+                f"<p><strong>Suggested fix:</strong> {html.escape(suggested_fix_for_issue(item))}</p>"
+                "</li>"
             )
             for item in issue_findings
         ]
@@ -833,8 +915,9 @@ def main() -> None:
         section_name="website_audit",
         max_tokens=max(1, int(get_max_tokens(cfg, section_name="website_audit", default=3500))),
     )
-    write_combined_email_artifact(html_body)
-    send_audit_email(reports, html_body)
+    full_email_body = compose_weekly_email_body(html_body, reports)
+    write_combined_email_artifact(full_email_body)
+    send_audit_email(reports, full_email_body)
     save_state(reports)
     print(f"Website audit weekly report sent successfully for {len(reports)} site(s)")
 

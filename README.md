@@ -144,6 +144,7 @@ Then run **Actions → 🔎 Website Audit → Run workflow** once to test it.
 Notes:
 
 - All configured targets are combined into one weekly email report in the current implementation.
+- The weekly email includes a structured broken-link list with URLs, captured anchor text when available, and suggested fixes.
 - The legacy single-site `start_url` field still works, but `targets` is the recommended format for multiple websites.
 - `follow_internal_links: false` means "only audit the specified page". Set it to `true` if you want the audit to continue crawling same-host internal pages up to `max_pages`.
 - The first version uses static HTTP crawling, so JavaScript-rendered links may be missed.
@@ -537,6 +538,7 @@ website_audit:
 说明：
 
 - 当前实现中，所有目标站点会合并成一封每周巡检邮件。
+- 每周巡检邮件会附带结构化坏链清单：包含失效链接 URL、已捕获到的 anchor text，以及建议修复动作。
 - 旧的单站点 `start_url` 写法仍然可用，但如果要配多个网站，推荐改成 `targets` 列表。
 - `follow_internal_links: false` 表示“只检查你指定的这个页面”；如果想继续抓取同站内页，再改成 `true`，并用 `max_pages` 控制最多抓多少页。
 - 当前版本使用静态 HTTP 抓取，JavaScript 动态渲染出来的链接可能抓不到。
