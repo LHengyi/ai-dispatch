@@ -147,7 +147,7 @@ digest:
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）
   openai_model: gpt-5.5                # openai: 默认 OpenAI 模型，可改成你自己的目标模型
   max_tokens: 6000
-  output_language: English  # 摘要输出语言，可改为 中文
+  output_language: 中文  # 摘要输出语言，可改为 中文
 
 
 # ──────────────────────────────────────────────
@@ -174,4 +174,4 @@ website_audit:
   max_workers: 8
   max_findings_in_prompt: 25
   max_tokens: 32786
-  output_language: English
+  output_language: 中文
