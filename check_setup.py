@@ -56,11 +56,12 @@ def section(title: str) -> None:
 # ── 0. 读取 config.yml（后续检查需要 provider 信息）──
 config_path = Path(__file__).parent / "config.yml"
 _cfg_raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
-provider = _cfg_raw.get("provider", "anthropic")
+provider = str(_cfg_raw.get("provider", "anthropic")).strip().lower()
 
 # ── 1. 环境变量 ──────────────────────────────────
 section("GitHub Secrets")
 provider_key_names = {
+    "deepseek": "DEEPSEEK_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -115,6 +116,7 @@ if check("config.yml 存在", config_path.exists()):
 section(f"LLM API ({provider})")
 api_key = os.getenv(llm_key_name)
 default_models = {
+    "deepseek": "deepseek-v4-flash",
     "gemini": "gemini-2.0-flash",
     "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-4-6",
@@ -126,6 +128,14 @@ if api_key:
             from google import genai as google_genai
             client = google_genai.Client(api_key=api_key)
             client.models.generate_content(model=model, contents="hi")
+        elif provider == "deepseek":
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=16,
+            )
         elif provider == "openai":
             from openai import OpenAI
             client = OpenAI(api_key=api_key)

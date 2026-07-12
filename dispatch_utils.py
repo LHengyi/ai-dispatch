@@ -26,6 +26,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
+    "deepseek": "deepseek-v4-flash",
     "gemini": "gemini-2.0-flash",
     "openai": "gpt-5.5",
 }
@@ -135,6 +136,23 @@ def generate_text(
         if chunks:
             return "\n".join(chunks)
         raise RuntimeError("OpenAI returned empty response")
+
+    if provider == "deepseek":
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=os.environ["DEEPSEEK_API_KEY"],
+            base_url="https://api.deepseek.com",
+        )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=token_limit,
+        )
+        text = response.choices[0].message.content
+        if isinstance(text, str) and text.strip():
+            return text
+        raise RuntimeError("DeepSeek returned empty response")
 
     import anthropic
 

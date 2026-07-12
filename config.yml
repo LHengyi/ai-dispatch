@@ -126,8 +126,9 @@ arxiv_keywords:
   - foundation model
   - reasoning
 
-provider: openai          # ← 选择 LLM 提供商
+provider: deepseek          # ← 选择 LLM 提供商
                           #   gemini    — 免费，申请 key: https://aistudio.google.com/apikey
+                          #   deepseek  — 付费，申请 key: https://platform.deepseek.com/api_keys
                           #   openai    — 付费（ChatGPT API），申请 key: https://platform.openai.com/api-keys
                           #   anthropic — 付费，申请 key: https://console.anthropic.com
 
@@ -142,6 +143,7 @@ digest:
   news_per_source: 50     # 每个新闻源最多抓取条数
   blog_per_source: 20     # 每个博客最多抓取条数
   anthropic_model: claude-sonnet-4-6   # anthropic: claude-sonnet-4-6 / claude-opus-4-8（更强但更贵）
+  deepseek_model: deepseek-v4-flash    # deepseek: 默认 DeepSeek 模型，可改成 deepseek-v4-pro
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）
   openai_model: gpt-5.5                # openai: 默认 OpenAI 模型，可改成你自己的目标模型
   max_tokens: 6000
