@@ -143,7 +143,7 @@ digest:
   blog_per_source: 20     # 每个博客最多抓取条数
   anthropic_model: claude-sonnet-4-6   # anthropic: claude-sonnet-4-6 / claude-opus-4-8（更强但更贵）
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）
-  openai_model: gpt-5.6                # openai: gpt-5.6（最新旗舰）/ gpt-5.6-luna（更便宜）/ gpt-5.6-terra（更快）
+  openai_model: gpt-5.5                # openai: 默认 OpenAI 模型，可改成你自己的目标模型
   max_tokens: 6000
   output_language: English  # 摘要输出语言，可改为 中文
 

@@ -27,7 +27,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.0-flash",
-    "openai": "gpt-5.6",
+    "openai": "gpt-5.5",
 }
 
 

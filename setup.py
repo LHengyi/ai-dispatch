@@ -121,7 +121,7 @@ def main():
         "使用哪个大模型？",
         [
             ("gemini",    "免费 · Google Gemini 2.0 Flash · 每天 1500 次请求"),
-            ("openai",    "付费 · OpenAI GPT-5.6 · ChatGPT API"),
+            ("openai",    "付费 · OpenAI GPT-5.5 · ChatGPT API"),
             ("anthropic", "付费 · Anthropic Claude · 质量更高，Sonnet 约 ¥0.36/天"),
         ],
     )
@@ -142,7 +142,7 @@ def main():
         print(dim("\n  申请 OpenAI API Key：https://platform.openai.com/api-keys"))
         api_key = ask("粘贴你的 OPENAI_API_KEY", secret=True)
         secret_name = "OPENAI_API_KEY"
-        default_model = "gpt-5.6"
+        default_model = "gpt-5.5"
     else:
         print(dim("\n  申请 Anthropic API Key：https://console.anthropic.com"))
         api_key = ask("粘贴你的 ANTHROPIC_API_KEY", secret=True)

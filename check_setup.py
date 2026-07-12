@@ -116,7 +116,7 @@ section(f"LLM API ({provider})")
 api_key = os.getenv(llm_key_name)
 default_models = {
     "gemini": "gemini-2.0-flash",
-    "openai": "gpt-5.6",
+    "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-4-6",
 }
 model = get_provider_model(cfg) if cfg else default_models.get(provider, "claude-sonnet-4-6")
