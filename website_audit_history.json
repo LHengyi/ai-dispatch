@@ -1,12 +1,12 @@
 {
   "last_sent_date": "2026-07-12",
   "last_site_count": 2,
-  "last_total_issue_count": 4,
+  "last_total_issue_count": 5,
   "sites": [
     {
       "name": "GitCode CANN",
       "start_url": "https://gitcode.com/cann",
-      "issue_count": 3
+      "issue_count": 4
     },
     {
       "name": "GitCode CANN Recipes",
