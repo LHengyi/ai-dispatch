@@ -6,8 +6,8 @@
 
 
 # ──────────────────────────────────────────────
-#  STEP 1 · 告诉 Claude 你关注什么领域
-#  这些主题会直接影响 Claude 的分析角度和重点
+#  STEP 1 · 告诉模型你关注什么领域
+#  这些主题会直接影响模型的分析角度和重点
 # ──────────────────────────────────────────────
 topics:
   - robotics
@@ -126,8 +126,9 @@ arxiv_keywords:
   - foundation model
   - reasoning
 
-provider: gemini        # ← 选择 LLM 提供商
+provider: openai          # ← 选择 LLM 提供商
                           #   gemini    — 免费，申请 key: https://aistudio.google.com/apikey
+                          #   openai    — 付费（ChatGPT API），申请 key: https://platform.openai.com/api-keys
                           #   anthropic — 付费，申请 key: https://console.anthropic.com
 
 send_hour_utc: 0          # ← fork 用户改这里调整发送时间（UTC 小时，0-23）
@@ -142,6 +143,7 @@ digest:
   blog_per_source: 20     # 每个博客最多抓取条数
   anthropic_model: claude-sonnet-4-6   # anthropic: claude-sonnet-4-6 / claude-opus-4-8（更强但更贵）
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）
+  openai_model: gpt-5.6                # openai: gpt-5.6（最新旗舰）/ gpt-5.6-luna（更便宜）/ gpt-5.6-terra（更快）
   max_tokens: 6000
   output_language: English  # 摘要输出语言，可改为 中文
 

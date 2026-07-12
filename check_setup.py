@@ -60,7 +60,12 @@ provider = _cfg_raw.get("provider", "anthropic")
 
 # ── 1. 环境变量 ──────────────────────────────────
 section("GitHub Secrets")
-llm_key_name = "GEMINI_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY"
+provider_key_names = {
+    "gemini": "GEMINI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+}
+llm_key_name = provider_key_names.get(provider, "ANTHROPIC_API_KEY")
 required_secrets = {
     llm_key_name:        os.getenv(llm_key_name),
     "GMAIL_USER":        os.getenv("GMAIL_USER"),
@@ -109,13 +114,22 @@ if check("config.yml 存在", config_path.exists()):
 # ── 3. LLM API ───────────────────────────────────
 section(f"LLM API ({provider})")
 api_key = os.getenv(llm_key_name)
-model = get_provider_model(cfg) if cfg else ("gemini-2.0-flash" if provider == "gemini" else "claude-sonnet-4-6")
+default_models = {
+    "gemini": "gemini-2.0-flash",
+    "openai": "gpt-5.6",
+    "anthropic": "claude-sonnet-4-6",
+}
+model = get_provider_model(cfg) if cfg else default_models.get(provider, "claude-sonnet-4-6")
 if api_key:
     try:
         if provider == "gemini":
             from google import genai as google_genai
             client = google_genai.Client(api_key=api_key)
             client.models.generate_content(model=model, contents="hi")
+        elif provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            client.responses.create(model=model, input="hi")
         else:
             import anthropic as _anthropic
             client = _anthropic.Anthropic(api_key=api_key)

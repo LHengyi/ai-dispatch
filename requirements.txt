@@ -1,4 +1,5 @@
 feedparser==6.0.11
 anthropic>=0.40.0
 google-genai>=1.0.0
+openai
 pyyaml>=6.0

@@ -27,6 +27,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.0-flash",
+    "openai": "gpt-5.6",
 }
 
 
@@ -112,6 +113,28 @@ def generate_text(
             finish = response.candidates[0].finish_reason if response.candidates else "no candidates"
             raise RuntimeError(f"Gemini returned empty response (finish_reason={finish})")
         return text
+
+    if provider == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.responses.create(
+            model=model,
+            input=prompt,
+            max_output_tokens=token_limit,
+        )
+        text = getattr(response, "output_text", None)
+        if text:
+            return text
+
+        chunks = []
+        for item in getattr(response, "output", []) or []:
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "type", None) == "output_text" and getattr(content, "text", None):
+                    chunks.append(content.text)
+        if chunks:
+            return "\n".join(chunks)
+        raise RuntimeError("OpenAI returned empty response")
 
     import anthropic
 

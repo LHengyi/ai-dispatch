@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'LLM provider — gemini (free) or anthropic (paid)'
+        description: 'LLM provider — gemini (free), openai (paid), or anthropic (paid)'
         required: true
-        default: gemini
+        default: openai
         type: choice
         options:
           - gemini
+          - openai
           - anthropic
       gmail_user:
         description: 'Your Gmail address  (e.g. you@gmail.com)'
@@ -48,11 +49,16 @@ jobs:
           python3 - <<'EOF'
           import re, sys
 
+          provider_models = {
+              "gemini": "gemini-2.0-flash",
+              "openai": "gpt-5.6",
+              "anthropic": "claude-sonnet-4-6",
+          }
           provider  = "${{ inputs.provider }}"
           hour      = "${{ inputs.send_hour_utc }}".strip()
           language  = "${{ inputs.output_language }}"
-          model     = "gemini-2.0-flash" if provider == "gemini" else "claude-sonnet-4-6"
-          model_key = "gemini_model" if provider == "gemini" else "anthropic_model"
+          model     = provider_models[provider]
+          model_key = f"{provider}_model"
 
           try:
               hour_int = int(hour)
@@ -94,6 +100,9 @@ jobs:
           if [ "$PROVIDER" = "gemini" ]; then
             KEY_NAME="GEMINI_API_KEY"
             KEY_HINT="Get a free key at https://aistudio.google.com/apikey"
+          elif [ "$PROVIDER" = "openai" ]; then
+            KEY_NAME="OPENAI_API_KEY"
+            KEY_HINT="Create a key at https://platform.openai.com/api-keys"
           else
             KEY_NAME="ANTHROPIC_API_KEY"
             KEY_HINT="Get a key at https://console.anthropic.com"

@@ -121,6 +121,7 @@ def main():
         "使用哪个大模型？",
         [
             ("gemini",    "免费 · Google Gemini 2.0 Flash · 每天 1500 次请求"),
+            ("openai",    "付费 · OpenAI GPT-5.6 · ChatGPT API"),
             ("anthropic", "付费 · Anthropic Claude · 质量更高，Sonnet 约 ¥0.36/天"),
         ],
     )
@@ -137,6 +138,11 @@ def main():
             api_key = ask("粘贴你的 GEMINI_API_KEY", secret=True)
         secret_name = "GEMINI_API_KEY"
         default_model = "gemini-2.0-flash"
+    elif provider == "openai":
+        print(dim("\n  申请 OpenAI API Key：https://platform.openai.com/api-keys"))
+        api_key = ask("粘贴你的 OPENAI_API_KEY", secret=True)
+        secret_name = "OPENAI_API_KEY"
+        default_model = "gpt-5.6"
     else:
         print(dim("\n  申请 Anthropic API Key：https://console.anthropic.com"))
         api_key = ask("粘贴你的 ANTHROPIC_API_KEY", secret=True)
@@ -194,7 +200,7 @@ def main():
     section("更新 config.yml")
     config_path = Path(__file__).parent / "config.yml"
     raw = config_path.read_text(encoding="utf-8")
-    model_key = "gemini_model" if provider == "gemini" else "anthropic_model"
+    model_key = f"{provider}_model"
 
     # provider
     raw = re.sub(r"^(provider:\s*)\S+", f"\\g<1>{provider}", raw, flags=re.MULTILINE)
