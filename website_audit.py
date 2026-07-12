@@ -566,57 +566,87 @@ def findings_for_prompt(report: dict, limit: int) -> str:
     return "\n".join(lines)
 
 
-def build_llm_prompt(report: dict, cfg: dict, target_cfg: dict | None = None) -> str:
-    audit_cfg = build_effective_audit_cfg(cfg, target_cfg or {})
+def reports_for_prompt(reports: list[dict], limit: int) -> str:
+    sections = []
+    for index, report in enumerate(reports, start=1):
+        sections.append(
+            "\n".join(
+                [
+                    f"站点 {index}",
+                    f"- 名称：{report['target_name']}",
+                    f"- 起始页面：{report['start_url']}",
+                    f"- 站点主机：{report['root_host']}",
+                    f"- 抓取页面数：{report['pages_crawled']} / 上限 {report['max_pages']}",
+                    f"- 是否继续抓取站内页：{report['follow_internal_links']}",
+                    f"- 唯一链接检查数：{report['unique_links_checked']}",
+                    f"- 问题链接数：{report['issue_count']}",
+                    f"- 内部问题：{report['internal_issue_count']}",
+                    f"- 外部问题：{report['external_issue_count']}",
+                    f"- 涉及页面数：{report['pages_with_issues']}",
+                    f"- 是否检查外链：{report['check_external_links']}",
+                    "问题样本：",
+                    findings_for_prompt(report, limit),
+                ]
+            )
+        )
+    return "\n\n".join(sections)
+
+
+def build_weekly_llm_prompt(reports: list[dict], cfg: dict) -> str:
+    audit_cfg = cfg.get("website_audit") or {}
     language = str(audit_cfg.get("output_language") or get_section_language(cfg, section_name="website_audit"))
     prompt_limit = max(1, int(audit_cfg.get("max_findings_in_prompt", 25)))
-    findings_text = findings_for_prompt(report, prompt_limit)
+    reports_text = reports_for_prompt(reports, prompt_limit)
+    total_issues = sum(report["issue_count"] for report in reports)
+    total_internal = sum(report["internal_issue_count"] for report in reports)
+    total_external = sum(report["external_issue_count"] for report in reports)
+    total_pages = sum(report["pages_crawled"] for report in reports)
+    total_links = sum(report["unique_links_checked"] for report in reports)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    return f"""你是 AI Dispatch 的网站质量审计编辑。你会收到一个由程序抓取和探测得到的网站链接审计结果。
-请你基于这些结构化事实，写一封发给网站负责人的 HTML 邮件摘要。不要虚构未给出的页面、链接或错误。
+    return f"""你是 AI Dispatch 的网站质量审计编辑。你会收到一个由程序抓取和探测得到的多站点网站链接审计结果。
+请你基于这些结构化事实，写一封“合并后的周报 HTML 邮件”。不要虚构未给出的页面、链接或错误。
 
 要求：
 1. 所有输出使用 {language}。
 2. 严格输出 HTML 片段，不要加 markdown 代码块，不要加 ```html。
-3. 重点优先级：内部链接问题 > 外部链接问题。
-4. 对 403 / 429 这类结果要谨慎措辞，说明它们可能是权限或反爬限制，不一定是用户可见的坏链。
-5. 如果没有发现问题，也要给出简短结论，并明确说明这是静态 HTTP 抓取，可能遗漏 JavaScript 动态渲染出的链接。
+3. 这是“一封汇总周报”，必须在同一封邮件里覆盖所有站点，不要拆成多封。
+4. 重点优先级：内部链接问题 > 外部链接问题。
+5. 先给出跨站点的总体判断，再逐站点写重点问题。
+6. 对 403 / 429 这类结果要谨慎措辞，说明它们可能是权限或反爬限制，不一定是用户可见的坏链。
+7. 如果某个站点没有发现问题，也要在邮件中明确写出。
+8. 如果整体没有发现问题，也要给出简短结论，并明确说明这是静态 HTTP 抓取，可能遗漏 JavaScript 动态渲染出的链接。
 
-审计元数据：
-- 审计时间：{report['generated_at_utc']}
-- 站点名称：{report['target_name']}
-- 起始页面：{report['start_url']}
-- 站点主机：{report['root_host']}
-- 实际抓取页面数：{report['pages_crawled']} / 上限 {report['max_pages']}
-- 是否继续抓取站内页：{report['follow_internal_links']}
-- 唯一链接检查数：{report['unique_links_checked']}
-- 问题链接数：{report['issue_count']}
-- 内部问题：{report['internal_issue_count']}
-- 外部问题：{report['external_issue_count']}
-- 涉及页面数：{report['pages_with_issues']}
-- 是否检查外链：{report['check_external_links']}
+本次周报汇总元数据：
+- 生成时间：{generated_at}
+- 站点数量：{len(reports)}
+- 总抓取页面数：{total_pages}
+- 总唯一链接检查数：{total_links}
+- 总问题链接数：{total_issues}
+- 总内部问题：{total_internal}
+- 总外部问题：{total_external}
 
-问题样本：
-{findings_text}
+逐站点审计数据：
+{reports_text}
 
 请按这个 HTML 结构输出：
 
-<h2>🔎 Website Audit · 日期</h2>
-<p class="intro">一句话总结整体状态和范围</p>
+<h2>🔎 Website Audit Weekly Report · 日期</h2>
+<p class="intro">一句话概括本周整体风险和覆盖范围</p>
 
-<div class="section-title">Executive Summary</div>
+<div class="section-title">Weekly Summary</div>
 <p>...</p>
 
-<div class="section-title">Highest Priority Findings</div>
+<div class="section-title">Site-by-Site Findings</div>
 <div class="issue">
-  <h3>问题标题</h3>
-  <span class="meta">内部/外部 · 状态码/错误类型 · 受影响次数</span>
-  <p><strong>What happened:</strong> ...</p>
+  <h3>站点名称</h3>
+  <span class="meta">问题数 / 内外链分布 / 抓取范围</span>
+  <p><strong>Top issues:</strong> ...</p>
   <p><strong>Why it matters:</strong> ...</p>
   <p><strong>Where to look:</strong> ...</p>
 </div>
 
-<div class="section-title">Patterns & Risks</div>
+<div class="section-title">Cross-Site Patterns & Risks</div>
 <div class="pattern">
   <h3>模式名称</h3>
   <p>...</p>
@@ -666,7 +696,38 @@ a { color: #0b5db1; }
 """
 
 
-def write_artifacts(report: dict, email_html: str, index: int) -> Path:
+def build_site_html_artifact(report: dict) -> str:
+    issue_findings = [item for item in report["findings"] if not item["ok"]][:10]
+    issue_items = "\n".join(
+        [
+            (
+                f"<li><strong>{'INTERNAL' if item['internal'] else 'EXTERNAL'}</strong> · "
+                f"{item['issue_kind']} · {item['status_code'] or 'n/a'} · {item['url']}</li>"
+            )
+            for item in issue_findings
+        ]
+    ) or "<li>No issues found</li>"
+
+    return f"""
+<h2>🔎 {report['target_name']}</h2>
+<p class="intro">Target: {report['start_url']}</p>
+<div class="section-title">Snapshot</div>
+<ul>
+  <li>Generated: {report['generated_at_utc']}</li>
+  <li>Pages crawled: {report['pages_crawled']}</li>
+  <li>Unique links checked: {report['unique_links_checked']}</li>
+  <li>Issues found: {report['issue_count']}</li>
+  <li>Follow internal links: {report['follow_internal_links']}</li>
+  <li>Check external links: {report['check_external_links']}</li>
+</ul>
+<div class="section-title">Top Issues</div>
+<ul>
+  {issue_items}
+</ul>
+""".strip()
+
+
+def write_artifacts(report: dict, index: int) -> Path:
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     site_dir = ARTIFACT_DIR / f"{index:02d}_{slugify(report['target_name'])}"
     site_dir.mkdir(parents=True, exist_ok=True)
@@ -675,7 +736,7 @@ def write_artifacts(report: dict, email_html: str, index: int) -> Path:
         json.dumps(report, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    (site_dir / "report_email.html").write_text(email_html, encoding="utf-8")
+    (site_dir / "report_email.html").write_text(build_site_html_artifact(report), encoding="utf-8")
 
     issue_lines = [
         f"- {'INTERNAL' if item['internal'] else 'EXTERNAL'} | {item['issue_kind']} | "
@@ -703,14 +764,19 @@ def write_artifacts(report: dict, email_html: str, index: int) -> Path:
     return site_dir
 
 
-def send_audit_email(report: dict, html_body: str) -> None:
+def write_combined_email_artifact(html_body: str) -> None:
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    (ARTIFACT_DIR / "weekly_report_email.html").write_text(html_body, encoding="utf-8")
+
+
+def send_audit_email(reports: list[dict], html_body: str) -> None:
     today = datetime.now().strftime("%m/%d")
-    subject = f"🔎 Website Audit · {report['target_name']} · {today}"
+    subject = f"🔎 Website Audit Weekly Report · {len(reports)} Sites · {today}"
     send_email(
         subject,
         html_body,
-        header_title="🔎 Website Audit",
-        footer_text="AI Dispatch · Static crawl + LLM analysis · GitHub Actions delivery",
+        header_title="🔎 Website Audit Weekly Report",
+        footer_text="AI Dispatch · Weekly multi-site static crawl + LLM analysis · GitHub Actions delivery",
         css=AUDIT_EMAIL_CSS,
     )
 
@@ -723,6 +789,7 @@ def write_run_summary(reports: list[dict]) -> None:
         f"- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"- Sites audited: {len(reports)}",
         f"- Total issues: {sum(report['issue_count'] for report in reports)}",
+        "- Combined email artifact: weekly_report_email.html",
         "",
     ]
 
@@ -756,21 +823,20 @@ def main() -> None:
         print(f"Mode: {'single-page' if not report['follow_internal_links'] else 'site-crawl'}")
         print(f"Crawled {report['pages_crawled']} pages and checked {report['unique_links_checked']} links")
         print(f"Found {issue_count} link issues ({report['internal_issue_count']} internal / {report['external_issue_count']} external)")
-
-        prompt = build_llm_prompt(report, cfg, target_cfg)
-        html_body = generate_text(
-            prompt,
-            cfg,
-            section_name="website_audit",
-            max_tokens=max(1, int(target_cfg.get("max_tokens", get_max_tokens(cfg, section_name="website_audit", default=3500)))),
-        )
-
-        write_artifacts(report, html_body, index)
-        send_audit_email(report, html_body)
+        write_artifacts(report, index)
 
     write_run_summary(reports)
+    prompt = build_weekly_llm_prompt(reports, cfg)
+    html_body = generate_text(
+        prompt,
+        cfg,
+        section_name="website_audit",
+        max_tokens=max(1, int(get_max_tokens(cfg, section_name="website_audit", default=3500))),
+    )
+    write_combined_email_artifact(html_body)
+    send_audit_email(reports, html_body)
     save_state(reports)
-    print(f"Website audit reports sent successfully for {len(reports)} site(s)")
+    print(f"Website audit weekly report sent successfully for {len(reports)} site(s)")
 
 
 if __name__ == "__main__":
