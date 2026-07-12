@@ -36,6 +36,12 @@ ISSUE_PRIORITY = {
     "rate_limited": 5,
     "request_error": 6,
 }
+SOFT_NOT_FOUND_MARKERS = {
+    "gitcode.com": (
+        "为空或不存在",
+        "文件不存在",
+    ),
+}
 
 
 class AnchorParser(HTMLParser):
@@ -208,6 +214,8 @@ def decode_html(body: bytes, content_type: str) -> str:
 
 
 def classify_issue(status_code: int | None, error_type: str | None) -> str:
+    if error_type == "soft_404":
+        return "not_found"
     if status_code in {404, 410}:
         return "not_found"
     if status_code in {401, 403}:
@@ -300,16 +308,66 @@ def fetch_page(url: str, timeout_seconds: int) -> dict:
     return result
 
 
+def should_inspect_html_body(url: str, result: dict) -> bool:
+    if "text/html" not in (result.get("content_type") or "").lower():
+        return False
+
+    final_url = result.get("final_url") or url
+    host = canonical_host(final_url)
+    if host not in SOFT_NOT_FOUND_MARKERS:
+        return False
+
+    parsed = urlparse(final_url)
+    return "/blob/" in parsed.path or "/tree/" in parsed.path or "_fb=blob" in parsed.query
+
+
+def mark_soft_not_found(url: str, result: dict) -> dict:
+    if not result["ok"] or not should_inspect_html_body(url, result):
+        return result
+
+    html = result.get("html")
+    if html is None:
+        body = result.get("body") or b""
+        html = decode_html(body, result.get("content_type", "")) if body else ""
+        result["html"] = html
+
+    host = canonical_host(result.get("final_url") or url)
+    for marker in SOFT_NOT_FOUND_MARKERS.get(host, ()):
+        if marker in html:
+            soft_result = dict(result)
+            soft_result["ok"] = False
+            soft_result["error_type"] = "soft_404"
+            soft_result["error_detail"] = f"HTML body indicates missing resource: {marker}"
+            return soft_result
+
+    return result
+
+
 def probe_link(url: str, timeout_seconds: int) -> dict:
     head_result = request_url(url, timeout_seconds=timeout_seconds, method="HEAD", read_body=False)
     if head_result["ok"]:
+        if should_inspect_html_body(url, head_result):
+            # Some Git hosting pages return 200 for missing files and only reveal the error in HTML body.
+            get_result = request_url(url, timeout_seconds=timeout_seconds, method="GET", read_body=True)
+            get_result["html"] = (
+                decode_html(get_result["body"], get_result["content_type"])
+                if get_result["ok"] and "text/html" in (get_result.get("content_type") or "").lower()
+                else ""
+            )
+            return mark_soft_not_found(url, get_result)
         return head_result
 
     if head_result["status_code"] in {404, 410}:
         return head_result
 
     if head_result["status_code"] in FALLBACK_TO_GET_STATUS_CODES or head_result["status_code"] is None:
-        return request_url(url, timeout_seconds=timeout_seconds, method="GET", read_body=False)
+        get_result = request_url(url, timeout_seconds=timeout_seconds, method="GET", read_body=True)
+        get_result["html"] = (
+            decode_html(get_result["body"], get_result["content_type"])
+            if get_result["ok"] and "text/html" in (get_result.get("content_type") or "").lower()
+            else ""
+        )
+        return mark_soft_not_found(url, get_result)
 
     return head_result
 
