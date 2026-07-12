@@ -165,10 +165,11 @@ website_audit:
       start_url: https://gitcode.com/cann
     - name: GitCode CANN Recipes
       start_url: https://gitcode.com/cann/cann-recipes-infer
-  send_hour_utc: 8
-  max_pages: 25
-  max_links_per_page: 150
-  check_external_links: true
+  send_hour_utc: 0
+  follow_internal_links: false  # false = 只检查 start_url 这个页面；true = 继续抓同站内页
+  max_pages: 25                 # 仅在 follow_internal_links: true 时生效
+  max_links_per_page: 150       # 每个已抓取页面最多解析多少个 <a> 链接
+  check_external_links: true    # 是否检查跳向站外的链接
   request_timeout_seconds: 15
   max_workers: 8
   max_findings_in_prompt: 25

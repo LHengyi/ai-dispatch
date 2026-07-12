@@ -119,7 +119,7 @@ Once all green, AI Dispatch runs automatically every day. The default send time 
 
 ## Optional: Website Link Audit
 
-AI Dispatch can also run a separate website audit that crawls one or more target sites, checks for broken or inaccessible links, asks your configured LLM to write a prioritized report, and emails that report to the same inbox.
+AI Dispatch can also run a separate website audit that checks one or more target pages or sites for broken or inaccessible links, asks your configured LLM to write a prioritized report, and emails that report to the same inbox.
 
 Enable it in `config.yml`:
 
@@ -132,6 +132,7 @@ website_audit:
       start_url: https://example.com
     - name: Docs
       start_url: https://docs.example.com
+  follow_internal_links: false
   max_pages: 25
   check_external_links: true
 ```
@@ -142,6 +143,7 @@ Notes:
 
 - Each target site generates its own email report in the current implementation.
 - The legacy single-site `start_url` field still works, but `targets` is the recommended format for multiple websites.
+- `follow_internal_links: false` means "only audit the specified page". Set it to `true` if you want the audit to continue crawling same-host internal pages up to `max_pages`.
 - The first version uses static HTTP crawling, so JavaScript-rendered links may be missed.
 - The website audit workflow is separate from the daily news workflow, so the two jobs do not block each other.
 
@@ -507,7 +509,7 @@ python setup.py
 
 ## 可选功能：网站链接巡检
 
-AI Dispatch 还可以单独运行一个网站巡检任务：抓取一个或多个指定站点、检查坏链或不可访问链接、交给 LLM 生成优先级报告，并把结果发到同一个邮箱。
+AI Dispatch 还可以单独运行一个网站巡检任务：检查一个或多个指定页面或站点的坏链/不可访问链接，交给 LLM 生成优先级报告，并把结果发到同一个邮箱。
 
 在 `config.yml` 里启用：
 
@@ -520,6 +522,7 @@ website_audit:
       start_url: https://example.com
     - name: Docs
       start_url: https://docs.example.com
+  follow_internal_links: false
   max_pages: 25
   check_external_links: true
 ```
@@ -530,6 +533,7 @@ website_audit:
 
 - 当前实现中，每个目标站点会各自发送一封巡检邮件。
 - 旧的单站点 `start_url` 写法仍然可用，但如果要配多个网站，推荐改成 `targets` 列表。
+- `follow_internal_links: false` 表示“只检查你指定的这个页面”；如果想继续抓取同站内页，再改成 `true`，并用 `max_pages` 控制最多抓多少页。
 - 当前版本使用静态 HTTP 抓取，JavaScript 动态渲染出来的链接可能抓不到。
 - 网站巡检与新闻简报是两条独立 workflow，彼此不会互相阻塞。
 

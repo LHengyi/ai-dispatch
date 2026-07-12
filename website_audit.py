@@ -99,6 +99,18 @@ def slugify(value: str) -> str:
     return slug or "site"
 
 
+def coerce_bool(value: object, *, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be true or false")
+
+
 def normalize_target_entry(target: str | dict, index: int) -> dict:
     if isinstance(target, str):
         target_cfg = {"start_url": target}
@@ -333,7 +345,15 @@ def audit_site(cfg: dict, target_cfg: dict | None = None) -> dict:
     max_pages = max(1, int(audit_cfg.get("max_pages", 25)))
     max_links_per_page = max(1, int(audit_cfg.get("max_links_per_page", 150)))
     max_workers = max(1, int(audit_cfg.get("max_workers", 8)))
-    check_external_links = bool(audit_cfg.get("check_external_links", True))
+    follow_internal_links = coerce_bool(
+        audit_cfg.get("follow_internal_links", True),
+        name="website_audit.follow_internal_links",
+    )
+    check_external_links = coerce_bool(
+        audit_cfg.get("check_external_links", True),
+        name="website_audit.check_external_links",
+    )
+    page_limit = max_pages if follow_internal_links else 1
 
     queue = deque([start_url])
     enqueued = {start_url}
@@ -342,7 +362,7 @@ def audit_site(cfg: dict, target_cfg: dict | None = None) -> dict:
     page_status_cache: dict[str, dict] = {}
     page_fetches: list[dict] = []
 
-    while queue and len(visited_pages) < max_pages:
+    while queue and len(visited_pages) < page_limit:
         page_url = queue.popleft()
         if page_url in visited_pages:
             continue
@@ -376,7 +396,13 @@ def audit_site(cfg: dict, target_cfg: dict | None = None) -> dict:
                 }
             )
 
-            if internal and normalized not in visited_pages and normalized not in enqueued and should_crawl_url(normalized):
+            if (
+                follow_internal_links
+                and internal
+                and normalized not in visited_pages
+                and normalized not in enqueued
+                and should_crawl_url(normalized)
+            ):
                 queue.append(normalized)
                 enqueued.add(normalized)
 
@@ -456,8 +482,9 @@ def audit_site(cfg: dict, target_cfg: dict | None = None) -> dict:
         "internal_issue_count": internal_issues,
         "external_issue_count": external_issues,
         "pages_with_issues": issue_pages,
+        "follow_internal_links": follow_internal_links,
         "check_external_links": check_external_links,
-        "max_pages": max_pages,
+        "max_pages": page_limit,
         "findings": findings,
     }
 
@@ -503,6 +530,7 @@ def build_llm_prompt(report: dict, cfg: dict, target_cfg: dict | None = None) ->
 - 起始页面：{report['start_url']}
 - 站点主机：{report['root_host']}
 - 实际抓取页面数：{report['pages_crawled']} / 上限 {report['max_pages']}
+- 是否继续抓取站内页：{report['follow_internal_links']}
 - 唯一链接检查数：{report['unique_links_checked']}
 - 问题链接数：{report['issue_count']}
 - 内部问题：{report['internal_issue_count']}
@@ -604,6 +632,7 @@ def write_artifacts(report: dict, email_html: str, index: int) -> Path:
             f"- Site name: {report['target_name']}",
             f"- Target: {report['start_url']}",
             f"- Generated: {report['generated_at_utc']}",
+            f"- Follow internal links: {report['follow_internal_links']}",
             f"- Pages crawled: {report['pages_crawled']}",
             f"- Unique links checked: {report['unique_links_checked']}",
             f"- Issues found: {report['issue_count']}",
@@ -644,6 +673,7 @@ def write_run_summary(reports: list[dict]) -> None:
             [
                 f"## {report['target_name']}",
                 f"- Target: {report['start_url']}",
+                f"- Follow internal links: {report['follow_internal_links']}",
                 f"- Pages crawled: {report['pages_crawled']}",
                 f"- Unique links checked: {report['unique_links_checked']}",
                 f"- Issues found: {report['issue_count']}",
@@ -665,6 +695,7 @@ def main() -> None:
 
         issue_count = report["issue_count"]
         print(f"[{index}/{len(targets)}] Auditing {report['target_name']} ({report['start_url']})")
+        print(f"Mode: {'single-page' if not report['follow_internal_links'] else 'site-crawl'}")
         print(f"Crawled {report['pages_crawled']} pages and checked {report['unique_links_checked']} links")
         print(f"Found {issue_count} link issues ({report['internal_issue_count']} internal / {report['external_issue_count']} external)")
 

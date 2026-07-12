@@ -109,6 +109,14 @@ if check("config.yml 存在", config_path.exists()):
             send_hour = audit_cfg.get("send_hour_utc")
             hour_ok = isinstance(send_hour, int) and 0 <= send_hour <= 23
             check("website_audit.send_hour_utc", hour_ok, str(send_hour))
+            follow_internal_links = audit_cfg.get("follow_internal_links", True)
+            follow_detail = (
+                "继续抓站内页" if follow_internal_links is True
+                else "仅检查起始页" if follow_internal_links is False
+                else str(follow_internal_links)
+            )
+            check("website_audit.follow_internal_links", isinstance(follow_internal_links, bool),
+                  follow_detail)
     except Exception as e:
         check("YAML 格式正确", False, str(e))
 
@@ -195,7 +203,7 @@ if all_ok and gmail_user and gmail_pass and recipient:
   <tr><td style="padding:8px;color:#666">使用模型</td>
       <td>{model}</td></tr>
   <tr><td style="padding:8px;color:#666">网站巡检</td>
-      <td>{"启用" if (cfg.get('website_audit') or {}).get('enabled') else "未启用"}</td></tr>
+      <td>{"启用（继续抓站内页）" if ((cfg.get('website_audit') or {}).get('enabled') and (cfg.get('website_audit') or {}).get('follow_internal_links', True)) else ("启用（仅检查起始页）" if (cfg.get('website_audit') or {}).get('enabled') else "未启用")}</td></tr>
 </table>
 <p style="margin-top:24px;color:#888;font-size:12px">
   AI Dispatch · 由 config.yml send_hour_utc 控制发送时间
