@@ -2,7 +2,7 @@ name: 🔎 Website Audit
 
 on:
   schedule:
-    - cron: '0 0 * * 1'  # 固定 UTC 周一 00:00，即北京时间周一 08:00
+    - cron: '7 2 * * 1'  # 固定 UTC 周一 02:07，即北京时间周一 10:07
   workflow_dispatch:
 
 permissions:
@@ -16,19 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check audit schedule
+      - name: Check audit enabled state
         id: timecheck
         run: |
           ENABLED=$(awk '/^website_audit:/{flag=1;next}/^[^[:space:]]/{flag=0}flag && $1=="enabled:" {print $2; exit}' config.yml)
-          CONFIG_HOUR=$(awk '/^website_audit:/{flag=1;next}/^[^[:space:]]/{flag=0}flag && $1=="send_hour_utc:" {print $2; exit}' config.yml)
-          CURRENT_HOUR=$(date -u +%-H)
           CURRENT_DATE=$(date -u +%Y-%m-%d)
           LAST_SENT=$(python3 -c "import json; from pathlib import Path; p=Path('website_audit_history.json'); d=json.loads(p.read_text()) if p.exists() else {}; print(d.get('last_sent_date',''))" 2>/dev/null || echo "")
 
           ENABLED=${ENABLED:-false}
-          CONFIG_HOUR=${CONFIG_HOUR:-0}
 
-          echo "Enabled: $ENABLED | Config hour (UTC): $CONFIG_HOUR | Current hour (UTC): $CURRENT_HOUR | Last sent: $LAST_SENT"
+          echo "Enabled: $ENABLED | Current date (UTC): $CURRENT_DATE | Last sent: $LAST_SENT"
 
           if [ "$ENABLED" != "true" ]; then
             echo "Website audit disabled, skipping."
@@ -36,12 +33,9 @@ jobs:
           elif [ "$LAST_SENT" = "$CURRENT_DATE" ]; then
             echo "Already audited today, skipping."
             echo "should_send=false" >> $GITHUB_OUTPUT
-          elif [ "$CURRENT_HOUR" -ge "$CONFIG_HOUR" ]; then
-            echo "Hour $CURRENT_HOUR >= $CONFIG_HOUR and not yet audited today — will send."
-            echo "should_send=true" >> $GITHUB_OUTPUT
           else
-            echo "Hour $CURRENT_HOUR < $CONFIG_HOUR, too early."
-            echo "should_send=false" >> $GITHUB_OUTPUT
+            echo "Website audit enabled and not yet sent today — will run."
+            echo "should_send=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up Python

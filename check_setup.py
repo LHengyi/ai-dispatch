@@ -106,9 +106,6 @@ if check("config.yml 存在", config_path.exists()):
                 parsed = urlparse(start_url)
                 check(f"website_audit.{label}", bool(start_url) and parsed.scheme in {"http", "https"},
                       start_url or "未设置")
-            send_hour = audit_cfg.get("send_hour_utc")
-            hour_ok = isinstance(send_hour, int) and 0 <= send_hour <= 23
-            check("website_audit.send_hour_utc", hour_ok, str(send_hour))
             follow_internal_links = audit_cfg.get("follow_internal_links", True)
             follow_detail = (
                 "继续抓站内页" if follow_internal_links is True
@@ -206,7 +203,7 @@ if all_ok and gmail_user and gmail_pass and recipient:
       <td>{"启用（继续抓站内页）" if ((cfg.get('website_audit') or {}).get('enabled') and (cfg.get('website_audit') or {}).get('follow_internal_links', True)) else ("启用（仅检查起始页）" if (cfg.get('website_audit') or {}).get('enabled') else "未启用")}</td></tr>
 </table>
 <p style="margin-top:24px;color:#888;font-size:12px">
-  AI Dispatch · 由 config.yml send_hour_utc 控制发送时间
+  AI Dispatch · 每日简报时间由 config.yml send_hour_utc 控制，网站巡检时间由 workflow cron 控制
 </p>
 </body></html>"""
 
