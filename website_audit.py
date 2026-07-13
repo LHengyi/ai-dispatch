@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urldefrag, urljoin, urlparse
+from urllib.parse import unquote, urldefrag, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from dispatch_utils import generate_text, get_section_language, get_max_tokens, load_config, send_email
@@ -43,6 +43,11 @@ SOFT_NOT_FOUND_MARKERS = {
         "文件不存在",
     ),
 }
+NUXT_DATA_RE = re.compile(
+    r'<script type="application/json" data-nuxt-data="nuxt-app" data-ssr="true" '
+    r'id="__NUXT_DATA__">(.*?)</script>',
+    re.DOTALL,
+)
 
 
 class AnchorParser(HTMLParser):
@@ -214,8 +219,60 @@ def decode_html(body: bytes, content_type: str) -> str:
         return body.decode("utf-8", errors="replace")
 
 
+def parse_nuxt_data_payload(html_text: str) -> list | None:
+    match = NUXT_DATA_RE.search(html_text)
+    if not match:
+        return None
+
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+
+    return payload if isinstance(payload, list) else None
+
+
+def gitcode_tree_key_for_url(url: str) -> str | None:
+    parts = [part for part in urlparse(url).path.split("/") if part]
+    if len(parts) < 5 or parts[2] != "tree":
+        return None
+
+    namespace, repo, _, branch, *subpath = parts
+    decoded_branch = unquote(branch)
+    decoded_subpath = "/".join(unquote(part) for part in subpath)
+    if not decoded_subpath:
+        return None
+    return f"tree:{namespace}/{repo}:{decoded_branch}:{decoded_subpath}"
+
+
+def gitcode_tree_has_no_items(url: str, html_text: str) -> bool:
+    tree_key = gitcode_tree_key_for_url(url)
+    if not tree_key:
+        return False
+
+    payload = parse_nuxt_data_payload(html_text)
+    if not payload or len(payload) <= 3 or not isinstance(payload[3], dict):
+        return False
+
+    root_map = payload[3]
+    tree_index = root_map.get(tree_key)
+    if not isinstance(tree_index, int) or tree_index < 0 or tree_index >= len(payload):
+        return False
+
+    tree_entry = payload[tree_index]
+    if not isinstance(tree_entry, dict):
+        return False
+
+    items_index = tree_entry.get("items")
+    if not isinstance(items_index, int) or items_index < 0 or items_index >= len(payload):
+        return False
+
+    items = payload[items_index]
+    return isinstance(items, list) and len(items) == 0
+
+
 def classify_issue(status_code: int | None, error_type: str | None) -> str:
-    if error_type == "soft_404":
+    if error_type in {"soft_404", "empty_content"}:
         return "not_found"
     if status_code in {404, 410}:
         return "not_found"
@@ -326,22 +383,128 @@ def mark_soft_not_found(url: str, result: dict) -> dict:
     if not result["ok"] or not should_inspect_html_body(url, result):
         return result
 
-    html = result.get("html")
-    if html is None:
+    html_body = result.get("html")
+    if html_body is None:
         body = result.get("body") or b""
-        html = decode_html(body, result.get("content_type", "")) if body else ""
-        result["html"] = html
+        html_body = decode_html(body, result.get("content_type", "")) if body else ""
+        result["html"] = html_body
 
     host = canonical_host(result.get("final_url") or url)
     for marker in SOFT_NOT_FOUND_MARKERS.get(host, ()):
-        if marker in html:
+        if marker in html_body:
             soft_result = dict(result)
             soft_result["ok"] = False
             soft_result["error_type"] = "soft_404"
             soft_result["error_detail"] = f"HTML body indicates missing resource: {marker}"
             return soft_result
 
+    final_url = result.get("final_url") or url
+    if host == "gitcode.com" and gitcode_tree_has_no_items(final_url, html_body):
+        soft_result = dict(result)
+        soft_result["ok"] = False
+        soft_result["error_type"] = "empty_content"
+        soft_result["error_detail"] = (
+            "GitCode returned HTTP 200 for this tree page, but the SSR payload contains no tracked items "
+            "for the requested path."
+        )
+        return soft_result
+
     return result
+
+
+def extract_embedded_anchor_pairs(html_text: str) -> list[tuple[str, str]]:
+    payload = parse_nuxt_data_payload(html_text)
+    if not payload:
+        return []
+
+    pairs: list[tuple[str, str]] = []
+    queue = deque([payload])
+    seen_container_ids: set[int] = set()
+
+    while queue:
+        item = queue.popleft()
+        if isinstance(item, str):
+            if "<a " not in item or "</a>" not in item:
+                continue
+            parser = AnchorParser()
+            parser.feed(item)
+            pairs.extend(parser.links)
+            continue
+
+        if isinstance(item, list):
+            item_id = id(item)
+            if item_id in seen_container_ids:
+                continue
+            seen_container_ids.add(item_id)
+            queue.extend(item)
+            continue
+
+        if isinstance(item, dict):
+            item_id = id(item)
+            if item_id in seen_container_ids:
+                continue
+            seen_container_ids.add(item_id)
+            queue.extend(item.values())
+
+    return pairs
+
+
+def collect_page_link_candidates(
+    html_text: str,
+    *,
+    current_url: str,
+    root_host: str,
+    check_external_links: bool,
+) -> list[dict]:
+    parser = AnchorParser()
+    parser.feed(html_text)
+
+    candidates: list[dict] = []
+    seen_occurrences: set[tuple[str, str, bool]] = set()
+    raw_pairs = parser.links + extract_embedded_anchor_pairs(html_text)
+
+    for href, anchor_text in raw_pairs:
+        normalized = normalize_link(current_url, href)
+        if not normalized:
+            continue
+
+        internal = is_internal_url(normalized, root_host)
+        if not internal and not check_external_links:
+            continue
+
+        trimmed_anchor = anchor_text[:120]
+        occurrence_key = (normalized, trimmed_anchor, internal)
+        if occurrence_key in seen_occurrences:
+            continue
+        seen_occurrences.add(occurrence_key)
+
+        candidates.append(
+            {
+                "url": normalized,
+                "anchor_text": trimmed_anchor,
+                "internal": internal,
+            }
+        )
+
+    return candidates
+
+
+def select_page_link_urls(candidates: list[dict], max_links_per_page: int) -> set[str]:
+    internal_urls: list[str] = []
+    external_urls: list[str] = []
+    seen_urls: set[str] = set()
+
+    for item in candidates:
+        url = item["url"]
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        if item["internal"]:
+            internal_urls.append(url)
+        else:
+            external_urls.append(url)
+
+    return set((internal_urls + external_urls)[:max_links_per_page])
 
 
 def probe_link(url: str, timeout_seconds: int) -> dict:
@@ -434,18 +597,22 @@ def audit_site(cfg: dict, target_cfg: dict | None = None) -> dict:
         if not result["ok"] or not result["is_html"]:
             continue
 
-        parser = AnchorParser()
-        parser.feed(result["html"])
-
         current_url = result.get("final_url") or page_url
-        for href, anchor_text in parser.links[:max_links_per_page]:
-            normalized = normalize_link(current_url, href)
-            if not normalized:
+        candidates = collect_page_link_candidates(
+            result["html"],
+            current_url=current_url,
+            root_host=root_host,
+            check_external_links=check_external_links,
+        )
+        selected_urls = select_page_link_urls(candidates, max_links_per_page)
+
+        for item in candidates:
+            normalized = item["url"]
+            if normalized not in selected_urls:
                 continue
 
-            internal = is_internal_url(normalized, root_host)
-            if not internal and not check_external_links:
-                continue
+            anchor_text = item["anchor_text"]
+            internal = item["internal"]
 
             link_occurrences[normalized].append(
                 {
@@ -569,6 +736,11 @@ def findings_for_prompt(report: dict, limit: int) -> str:
 
 def suggested_fix_for_issue(item: dict) -> str:
     issue_kind = item.get("issue_kind")
+    if item.get("error_type") == "empty_content":
+        return (
+            "Point this link to a real file or non-empty directory. On GitCode, a 200 page with an empty "
+            "tree payload usually means the current path does not resolve to tracked repository content."
+        )
     if issue_kind == "not_found":
         if item.get("internal"):
             return "Update the href to the new canonical internal path, or restore the missing page/file at the expected location."

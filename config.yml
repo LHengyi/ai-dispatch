@@ -169,7 +169,7 @@ website_audit:
   # 当前默认：UTC 周一 02:07 = 北京时间周一 10:07
   follow_internal_links: false  # false = 只检查 start_url 这个页面；true = 继续抓同站内页
   max_pages: 25                 # 仅在 follow_internal_links: true 时生效
-  max_links_per_page: 150       # 每个已抓取页面最多解析多少个 <a> 链接
+  max_links_per_page: 200       # 每个已抓取页面最多解析多少个 <a> 链接
   check_external_links: true    # 是否检查跳向站外的链接
   request_timeout_seconds: 15
   max_workers: 8
