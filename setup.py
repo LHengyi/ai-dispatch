@@ -163,17 +163,7 @@ def main():
     gmail_pass = ask("应用密码（16位，无空格）", secret=True)
     recipient  = ask("收件邮箱", default=gmail_user)
 
-    # ── 4. 发送时间 ───────────────────────────────────────────────────────────
-    section("发送时间")
-    print(dim("  GitHub Actions 使用 UTC 时间。常用参考："))
-    print(dim("  北京时间 08:00 = UTC 0 │ 伦敦 BST 07:00 = UTC 6 │ 纽约 07:00 = UTC 11"))
-    send_hour_raw = ask("期望触发时间（UTC 小时，0-23）", default="6")
-    try:
-        send_hour = int(send_hour_raw) % 24
-    except ValueError:
-        send_hour = 6
-
-    # ── 5. 输出语言 ───────────────────────────────────────────────────────────
+    # ── 4. 输出语言 ───────────────────────────────────────────────────────────
     section("简报语言")
     lang = ask_choice(
         "摘要输出语言？",
@@ -183,7 +173,7 @@ def main():
         ],
     )
 
-    # ── 6. 写入 GitHub Secrets ────────────────────────────────────────────────
+    # ── 5. 写入 GitHub Secrets ────────────────────────────────────────────────
     section("写入 GitHub Secrets")
     secrets = {
         secret_name:        api_key,
@@ -202,7 +192,7 @@ def main():
     if not all_ok:
         warn("部分 Secret 写入失败，可手动在 Settings → Secrets → Actions 中补充")
 
-    # ── 7. 更新 config.yml ────────────────────────────────────────────────────
+    # ── 6. 更新 config.yml ────────────────────────────────────────────────────
     section("更新 config.yml")
     config_path = Path(__file__).parent / "config.yml"
     raw = config_path.read_text(encoding="utf-8")
@@ -210,17 +200,15 @@ def main():
 
     # provider
     raw = re.sub(r"^(provider:\s*)\S+", f"\\g<1>{provider}", raw, flags=re.MULTILINE)
-    # send_hour_utc
-    raw = re.sub(r"^(send_hour_utc:\s*)\d+", f"\\g<1>{send_hour}", raw, flags=re.MULTILINE)
     # selected provider model
     raw = re.sub(rf"^(\s+{model_key}:\s*)\S+", f"\\g<1>{default_model}", raw, flags=re.MULTILINE)
     # output_language
     raw = re.sub(r"^(\s+output_language:\s*)\S+", f"\\g<1>{lang}", raw, flags=re.MULTILINE)
 
     config_path.write_text(raw, encoding="utf-8")
-    ok(f"provider={provider}, model={default_model}, send_hour_utc={send_hour}, language={lang}")
+    ok(f"provider={provider}, model={default_model}, language={lang}")
 
-    # ── 8. Commit & Push ──────────────────────────────────────────────────────
+    # ── 7. Commit & Push ──────────────────────────────────────────────────────
     section("提交配置")
     has_changes = run(["git", "diff", "--quiet", "config.yml"]).returncode != 0
     if has_changes:
@@ -239,7 +227,7 @@ def main():
     else:
         ok("config.yml 无变化，跳过提交")
 
-    # ── 9. 验证（可选）──────────────────────────────────────────────────────
+    # ── 8. 验证（可选）──────────────────────────────────────────────────────
     section("完成")
     print(f"""
   {green('✓')}  配置完成！
@@ -249,10 +237,10 @@ def main():
     1. 在 GitHub Actions 手动触发一次验证：
        {bold('Actions → ✅ Check Setup → Run workflow')}
 
-    2. 手动发送今天的简报测试效果：
-       {bold('Actions → AI Dispatch → Run workflow')}
+    2. 手动发送本周简报测试效果：
+       {bold('Actions → AI Dispatch Weekly → Run workflow')}
 
-  每天 UTC {send_hour}:00 左右会自动发送到 {recipient}。
+  新闻周报会在每周一 UTC 00:07（北京时间周一 08:07）自动发送到 {recipient}。
 """)
 
 

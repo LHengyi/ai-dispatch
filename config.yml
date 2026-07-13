@@ -132,16 +132,16 @@ provider: deepseek          # ← 选择 LLM 提供商
                           #   openai    — 付费（ChatGPT API），申请 key: https://platform.openai.com/api-keys
                           #   anthropic — 付费，申请 key: https://console.anthropic.com
 
-send_hour_utc: 0          # ← fork 用户改这里调整发送时间（UTC 小时，0-23）
-                          #   BST（夏令时 Apr-Oct，UTC+1）: 6 → 到达约 07:00 BST
-                          #   GMT（冬令时 Nov-Mar，UTC+0）: 7 → 到达约 07:00 GMT
-                          #   cron 每 15 分钟在目标窗口内触发，延迟通常 < 30 分钟
+# 新闻周报发送时间由 .github/workflows/daily_news.yml 里的 cron 决定
+# 当前默认：UTC 周一 00:07 = 北京时间周一 08:07
 
 digest:
-  news_hours: 24          # 新闻回溯窗口（小时）
-  blog_days: 90           # 博客 RSS 回溯窗口（天）
-  news_per_source: 50     # 每个新闻源最多抓取条数
+  news_hours: 168         # 周报新闻回溯窗口（小时，默认过去 7 天）
+  blog_days: 90           # 博客/经典文章候选池窗口（天）
+  news_per_source: 80     # 每个新闻源最多抓取条数（周报模式提高上限）
   blog_per_source: 20     # 每个博客最多抓取条数
+  max_news_items_for_prompt: 120      # 最多向 LLM 提供多少条新闻，避免周报 prompt 过大
+  max_blog_candidates_for_prompt: 40  # 最多向 LLM 提供多少篇博客/经典候选
   anthropic_model: claude-sonnet-4-6   # anthropic: claude-sonnet-4-6 / claude-opus-4-8（更强但更贵）
   deepseek_model: deepseek-v4-flash    # deepseek: 默认 DeepSeek 模型，可改成 deepseek-v4-pro
   gemini_model: gemini-2.0-flash       # gemini: gemini-2.0-flash（免费稳定）/ gemini-2.5-pro（更强）

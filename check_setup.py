@@ -186,7 +186,7 @@ if all_ok and gmail_user and gmail_pass and recipient:
         html = f"""<!DOCTYPE html>
 <html><body style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px">
 <h2 style="color:#1a1a2e">✅ AI Dispatch — 配置验证成功</h2>
-<p>你的环境已就绪，每日简报将按时自动发送到这个邮箱。</p>
+<p>你的环境已就绪，每周简报将按时自动发送到这个邮箱。</p>
 <table style="width:100%;border-collapse:collapse;font-size:14px">
   <tr><td style="padding:8px;color:#666">验证时间</td><td>{now}</td></tr>
   <tr><td style="padding:8px;color:#666">发件账号</td><td>{gmail_user}</td></tr>
@@ -203,7 +203,7 @@ if all_ok and gmail_user and gmail_pass and recipient:
       <td>{"启用（继续抓站内页）" if ((cfg.get('website_audit') or {}).get('enabled') and (cfg.get('website_audit') or {}).get('follow_internal_links', True)) else ("启用（仅检查起始页）" if (cfg.get('website_audit') or {}).get('enabled') else "未启用")}</td></tr>
 </table>
 <p style="margin-top:24px;color:#888;font-size:12px">
-  AI Dispatch · 每日简报时间由 config.yml send_hour_utc 控制，网站巡检时间由 workflow cron 控制
+  AI Dispatch · 新闻周报固定为 UTC 周一 00:07 / 北京时间周一 08:07；网站巡检固定为 UTC 周一 02:07 / 北京时间周一 10:07
 </p>
 </body></html>"""
 
@@ -229,7 +229,7 @@ else:
 # ── 结果汇总 ─────────────────────────────────────
 print("\n" + "═" * 54)
 if not errors:
-    print("  🎉  所有检查通过！查收测试邮件后即可等待每日简报。")
+    print("  🎉  所有检查通过！查收测试邮件后即可等待每周简报。")
 else:
     print(f"  ❌  {len(errors)} 项需要修复：")
     for e in errors:

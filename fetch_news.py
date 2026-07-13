@@ -9,6 +9,7 @@ from dispatch_utils import generate_text, load_config, send_email as send_wrappe
 
 HISTORY_PATH = Path(__file__).parent / "sent_history.json"
 HISTORY_MAX = 1000  # 最多保留最近 1000 条，防止文件无限增长
+ARTICLE_SUMMARY_MAX = 400  # 周报模式下控制单条摘要长度，避免 prompt 过大
 
 
 def load_history() -> dict:
@@ -35,6 +36,10 @@ def extract_recommended_url(html: str) -> str | None:
     """从 Claude 输出的 HTML 中提取 blog-pick 块里的链接。"""
     match = re.search(r'<div class="blog-pick">.*?<a href="([^"]+)"', html, re.DOTALL)
     return match.group(1) if match else None
+
+
+def _sort_key(item: dict) -> datetime:
+    return item.get("_published_dt") or datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _fetch_feeds(feeds: dict, hours: int, per_source: int,
@@ -67,8 +72,9 @@ def _fetch_feeds(feeds: dict, hours: int, per_source: int,
                     "source": source,
                     "title": title,
                     "url": entry.get("link", ""),
-                    "summary": summary[:1000] if summary else "",
+                    "summary": summary[:ARTICLE_SUMMARY_MAX] if summary else "",
                     "published": published.strftime("%Y-%m-%d %H:%M UTC") if published else "Unknown",
+                    "_published_dt": published,
                 })
         except Exception as e:
             print(f"[WARN] {source}: {e}", file=sys.stderr)
@@ -78,9 +84,10 @@ def _fetch_feeds(feeds: dict, hours: int, per_source: int,
 
 def fetch_recent_articles(cfg: dict) -> list[dict]:
     d = cfg["digest"]
-    return _fetch_feeds(
+    articles = _fetch_feeds(
         cfg["news_feeds"], d["news_hours"], d["news_per_source"], cfg["arxiv_keywords"]
     )
+    return sorted(articles, key=_sort_key, reverse=True)
 
 
 def fetch_blog_candidates(cfg: dict, history: set[str]) -> list[dict]:
@@ -101,49 +108,60 @@ def fetch_blog_candidates(cfg: dict, history: set[str]) -> list[dict]:
             "url": c["url"],
             "summary": c.get("note", ""),
             "published": str(c.get("year", "经典")),
+            "_published_dt": None,
         }
         for c in (cfg.get("classics") or [])
     ]
 
     # 合并后过滤历史
-    all_candidates = rss_blogs + classics
+    all_candidates = sorted(rss_blogs, key=_sort_key, reverse=True) + classics
     unsent = [a for a in all_candidates if a["url"] not in history]
     return unsent
 
 
 def summarize(articles: list[dict], blog_candidates: list[dict], cfg: dict) -> str:
     d = cfg["digest"]
+    total_articles = len(articles)
+    total_blog_candidates = len(blog_candidates)
+    max_news_items = max(1, int(d.get("max_news_items_for_prompt", 120)))
+    max_blog_items = max(1, int(d.get("max_blog_candidates_for_prompt", 40)))
+    prompt_articles = articles[:max_news_items]
+    prompt_blogs = blog_candidates[:max_blog_items]
 
     topics_str = "、".join(cfg["topics"])
     lang = d.get("output_language", "中文")
+    period_days = max(1, int(d["news_hours"]) // 24)
+    period_end = datetime.now().date()
+    period_start = period_end - timedelta(days=period_days - 1)
+    period_label = f"{period_start.strftime('%Y年%m月%d日')} - {period_end.strftime('%Y年%m月%d日')}"
 
     articles_text = "\n\n---\n\n".join(
         f"[{a['source']}] ({a['published']})\n标题: {a['title']}\n链接: {a['url']}\n摘要: {a['summary']}"
-        for a in articles
+        for a in prompt_articles
     )
     blogs_text = "\n\n---\n\n".join(
         f"[{b['source']}] ({b['published']})\n标题: {b['title']}\n链接: {b['url']}\n简介: {b['summary']}"
-        for b in blog_candidates
-    ) if blog_candidates else "（暂无候选，所有文章均已推送过）"
+        for b in prompt_blogs
+    ) if prompt_blogs else "（暂无候选，所有文章均已推送过）"
 
-    today = datetime.now().strftime("%Y年%m月%d日")
-
-    prompt = f"""你是 AI Dispatch 的主编，为顶级机构的同行撰写每日深度简报。
+    prompt = f"""你是 AI Dispatch 的主编，为顶级机构的同行撰写每周深度简报。
 读者是熟悉该领域的专业人士，不需要解释基础概念，需要的是洞察和判断。
 用户重点关注的方向：{topics_str}。
 所有输出请使用{lang}。
 
-【新闻资讯】过去 {d['news_hours']} 小时，共 {len(articles)} 条：
+【新闻资讯】过去 {d['news_hours']} 小时（约 {period_days} 天），共抓到 {total_articles} 条。
+以下提供最新且最相关的 {len(prompt_articles)} 条供你分析：
 
 {articles_text}
 
-【博客/经典文章候选池】共 {len(blog_candidates)} 篇（含近期博客、经典文章、访谈、大佬经验分享，均未推送过）：
+【博客/经典文章候选池】共 {total_blog_candidates} 篇（含近期博客、经典文章、访谈、大佬经验分享，均未推送过）。
+以下提供 {len(prompt_blogs)} 篇候选：
 
 {blogs_text}
 
 请完成以下五个部分，严格使用 HTML 格式输出（不要加 markdown 代码块、不要加 ```html）：
 
-第一部分：重点新闻（10-15条，优先与用户关注方向相关）
+第一部分：重点新闻（8-12条，优先与用户关注方向相关）
 每条包含：发生了什么（1句）、技术/商业意义（2-3句，要有判断和立场）、与其他动态的关联（如有）。
 
 第二部分：趋势分析
@@ -152,18 +170,18 @@ def summarize(articles: list[dict], blog_candidates: list[dict], cfg: dict) -> s
 第三部分：值得深挖
 2-3 篇值得精读的论文或报告（优先 arxiv），说明核心贡献和阅读重点。
 
-第四部分：今日推荐博客
+第四部分：本周推荐文章
 从候选池中挑选 1 篇最值得精读的（可以是近期博客、经典文章、访谈或经验分享，不限时间）。
-优先选择与今日新闻趋势有呼应的，或能提供长期视角的经典。
-给出：为什么今天推荐这篇（结合当下背景）、3 个核心观点（bullet）、适合谁读、大致阅读时间。
+优先选择与本周新闻趋势有呼应的，或能提供长期视角的经典。
+给出：为什么本周推荐这篇（结合当下背景）、3 个核心观点（bullet）、适合谁读、大致阅读时间。
 
-第五部分：今日信号
+第五部分：本周信号
 最关键的一个判断，不超过 60 字。
 
 HTML 格式模板：
 
-<h2>📡 AI Dispatch · {today}</h2>
-<p class="intro">新闻 {len(articles)} 条 · 博客 {len(blog_candidates)} 篇 · 聚焦 {topics_str}</p>
+<h2>📡 AI Dispatch Weekly · {period_label}</h2>
+<p class="intro">新闻 {total_articles} 条 · 博客 {total_blog_candidates} 篇 · 聚焦 {topics_str}</p>
 
 <div class="section-title">📌 重点新闻</div>
 
@@ -189,7 +207,7 @@ HTML 格式模板：
   <p>……</p>
 </div>
 
-<div class="section-title">📖 今日推荐博客</div>
+<div class="section-title">📖 本周推荐文章</div>
 
 <div class="blog-pick">
   <h3><a href="URL">文章标题</a></h3>
@@ -204,7 +222,7 @@ HTML 格式模板：
 </div>
 
 <div class="closing">
-  <strong>今日信号：</strong>……
+  <strong>本周信号：</strong>……
 </div>"""
     return generate_text(prompt, cfg, section_name="digest")
 
@@ -259,12 +277,12 @@ h2 { color: #0f0f1a; margin-top: 0; font-size: 20px; }
 
 def send_email(html_body: str) -> None:
     today = datetime.now().strftime("%m/%d")
-    subject = f"📡 AI Dispatch · {today}"
+    subject = f"📡 AI Dispatch Weekly · {today}"
     send_wrapped_email(
         subject,
         html_body,
-        header_title="📡 AI Dispatch",
-        footer_text="AI Dispatch · Powered by your configured LLM + GitHub Actions",
+        header_title="📡 AI Dispatch Weekly",
+        footer_text="AI Dispatch Weekly · Powered by your configured LLM + GitHub Actions",
         css=EMAIL_CSS,
     )
 

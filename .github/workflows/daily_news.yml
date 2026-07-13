@@ -1,9 +1,9 @@
-name: AI Dispatch
+name: AI Dispatch Weekly
 
 on:
   schedule:
-    - cron: '*/15 3-9 * * *'  # 每 15 分钟触发（UTC 3-9 点窗口），3-5 UTC 低峰先热身，减少 6+ UTC 积压
-  workflow_dispatch:        # 允许手动触发测试（忽略时间检查，直接发送）
+    - cron: '7 0 * * 1'   # 固定每周一 UTC 00:07 触发一次（北京时间周一 08:07）
+  workflow_dispatch:      # 允许手动触发测试（忽略重复发送检查，直接发送）
 
 permissions:
   contents: write           # 允许 Action 把 sent_history.json commit 回仓库
@@ -11,30 +11,25 @@ permissions:
 jobs:
   send-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check send hour
+      - name: Check weekly send state
         id: timecheck
         run: |
-          CONFIG_HOUR=$(grep 'send_hour_utc:' config.yml | awk '{print $2}')
-          CURRENT_HOUR=$(date -u +%-H)
           CURRENT_DATE=$(date -u +%Y-%m-%d)
           LAST_SENT=$(python3 -c "import json; d=json.load(open('sent_history.json')); print(d.get('last_sent_date',''))" 2>/dev/null || echo "")
 
-          echo "Config hour (UTC): $CONFIG_HOUR | Current hour (UTC): $CURRENT_HOUR | Last sent: $LAST_SENT | Today: $CURRENT_DATE"
+          echo "Last sent: $LAST_SENT | Today: $CURRENT_DATE"
 
           if [ "$LAST_SENT" = "$CURRENT_DATE" ]; then
-            echo "Already sent today, skipping."
+            echo "Already sent today, skipping scheduled run."
             echo "should_send=false" >> $GITHUB_OUTPUT
-          elif [ "$CURRENT_HOUR" -ge "$CONFIG_HOUR" ]; then
-            echo "Hour $CURRENT_HOUR >= $CONFIG_HOUR and not yet sent today — will send."
-            echo "should_send=true" >> $GITHUB_OUTPUT
           else
-            echo "Hour $CURRENT_HOUR < $CONFIG_HOUR, too early."
-            echo "should_send=false" >> $GITHUB_OUTPUT
+            echo "Not yet sent today — will send."
+            echo "should_send=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up Python
