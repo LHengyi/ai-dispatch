@@ -254,7 +254,7 @@ GitHub Actions is always free. The only potential cost is the LLM API call, depe
 
 | Model | Cost | Notes |
 |-------|------|-------|
-| `deepseek-v4-flash` | See official DeepSeek pricing | Default DeepSeek provider model |
+| `deepseek-flash` | See official DeepSeek pricing | Default DeepSeek provider model (DeepSeek-V4.1-Flash-1017) |
 | `deepseek-v4-pro` | See official DeepSeek pricing | Higher-end DeepSeek option |
 
 **Optional (OpenAI / ChatGPT API — paid):**
@@ -565,7 +565,7 @@ GitHub Actions 完全免费。唯一的可能成本是 LLM API 调用（取决�
 
 | 模型 | 费用 | 说明 |
 |------|------|------|
-| `deepseek-v4-flash` | 参考 DeepSeek 官方定价 | 默认 DeepSeek provider 模型 |
+| `deepseek-flash` | 参考 DeepSeek 官方定价 | 默认 DeepSeek provider 模型（DeepSeek-V4.1-Flash-1017） |
 | `deepseek-v4-pro` | 参考 DeepSeek 官方定价 | 更强的 DeepSeek 选项 |
 
 **OpenAI / ChatGPT API（付费，可选）：**

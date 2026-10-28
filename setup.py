@@ -148,7 +148,7 @@ def main():
         print(dim("\n  申请 DeepSeek API Key：https://platform.deepseek.com/api_keys"))
         api_key = ask("粘贴你的 DEEPSEEK_API_KEY", secret=True)
         secret_name = "DEEPSEEK_API_KEY"
-        default_model = "deepseek-v4-flash"
+        default_model = "deepseek-flash"
     else:
         print(dim("\n  申请 Anthropic API Key：https://console.anthropic.com"))
         api_key = ask("粘贴你的 ANTHROPIC_API_KEY", secret=True)

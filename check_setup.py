@@ -121,7 +121,7 @@ if check("config.yml 存在", config_path.exists()):
 section(f"LLM API ({provider})")
 api_key = os.getenv(llm_key_name)
 default_models = {
-    "deepseek": "deepseek-v4-flash",
+    "deepseek": "deepseek-flash",
     "gemini": "gemini-2.0-flash",
     "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-4-6",
