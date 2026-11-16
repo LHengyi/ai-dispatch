@@ -1,17 +1,17 @@
 {
-  "last_sent_date": "2026-11-11",
+  "last_sent_date": "2026-11-16",
   "last_site_count": 2,
-  "last_total_issue_count": 72,
+  "last_total_issue_count": 74,
   "sites": [
     {
       "name": "GitCode CANN",
       "start_url": "https://gitcode.com/cann",
-      "issue_count": 21
+      "issue_count": 8
     },
     {
       "name": "GitCode CANN Recipes",
       "start_url": "https://gitcode.com/cann/cann-recipes-infer",
-      "issue_count": 51
+      "issue_count": 66
     }
   ]
 }
